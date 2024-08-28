@@ -40,6 +40,18 @@ jobs:
       - name: Setup Cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Install libssl-dev on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+
+      - name: Install openssl on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install openssl@3
+          echo 'export OPENSSL_DIR="$(brew --prefix openssl@3)"' >> $GITHUB_ENV
+          echo 'export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"' >> $GITHUB_ENV
+          echo 'export PATH="$(brew --prefix openssl@3)/bin:$PATH"' >> $GITHUB_ENV
+
       - name: Build Binary
         run: cargo build --verbose --locked --release --target ${{ matrix.target }}
 

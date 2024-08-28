@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 taplo = {git = "https://github.com/frederik-uni/taplo"}
 tower-lsp = "0.20.0"
-git2 = "0.18"
+git2 = { version = "0.19.0", features = ["vendored-openssl"] }
 serde_json = "1"
 trie-rs = "0.4.2"
 clap = { version = "4.5.4", features = ["derive"] }
