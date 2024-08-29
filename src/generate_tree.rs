@@ -6,7 +6,7 @@ use taplo::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Tree(Vec<TreeValue>);
+pub(crate) struct Tree(pub Vec<TreeValue>);
 
 impl Tree {
     pub fn by_key(&self, key: &Key) -> Option<&Tree> {
@@ -19,8 +19,31 @@ impl Tree {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TreeValue {
-    key: Key,
-    value: Value,
+    pub key: Key,
+    pub value: Value,
+}
+
+impl TreeValue {
+    fn min(&self) -> u32 {
+        let mut min = self.key.range.start;
+
+        if let Some(v) = self.value.min() {
+            if v < min {
+                min = v
+            }
+        }
+        min
+    }
+    fn max(&self) -> u32 {
+        let mut max = self.key.range.end;
+
+        if let Some(v) = self.value.max() {
+            if v > max {
+                max = v
+            }
+        }
+        max
+    }
 }
 
 impl Value {
@@ -98,6 +121,9 @@ impl RangeExclusive {
     pub fn contains_inclusive(&self, pos: u32) -> bool {
         self.start <= pos && pos <= self.end
     }
+    fn overlaps(&self, start: u32, end: u32) -> bool {
+        self.start <= end && start <= self.end
+    }
 }
 
 impl From<TextRange> for RangeExclusive {
@@ -125,6 +151,24 @@ pub(crate) enum Value {
 }
 
 impl Value {
+    fn min(&self) -> Option<u32> {
+        match self {
+            Value::Tree(v) => v.min(),
+            Value::NoContent => None,
+            Value::Array(items) => items.iter().flat_map(|v| v.min()).min(),
+            Value::String { range, .. } => Some(range.start),
+            Value::Bool { range, .. } => Some(range.start),
+        }
+    }
+    fn max(&self) -> Option<u32> {
+        match self {
+            Value::Tree(v) => v.max(),
+            Value::NoContent => None,
+            Value::Array(items) => items.iter().flat_map(|v| v.max()).max(),
+            Value::String { range, .. } => Some(range.end),
+            Value::Bool { range, .. } => Some(range.end),
+        }
+    }
     fn range(&self) -> Option<&RangeExclusive> {
         match self {
             Value::Tree(_) => None,
@@ -211,6 +255,37 @@ impl KeyOrValueOwned {
             KeyOrValueOwned::Key(key) => Some(key),
             KeyOrValueOwned::Value(_) => None,
         }
+    }
+}
+
+impl Tree {
+    pub fn min(&self) -> Option<u32> {
+        let mut min = None;
+        for item in &self.0 {
+            match (min, item.min()) {
+                (None, v) => min = Some(v),
+                (Some(a), b) => min = Some(a.min(b)),
+            }
+        }
+        min
+    }
+    pub fn max(&self) -> Option<u32> {
+        let mut max = None;
+        for item in &self.0 {
+            match (max, item.max()) {
+                (None, v) => max = Some(v),
+                (Some(a), b) => max = Some(a.max(b)),
+            }
+        }
+        max
+    }
+}
+
+impl TreeValue {
+    pub fn is_in_range(&self, min: u32, max: u32) -> bool {
+        let s_min = self.min();
+        let s_max = self.max();
+        s_min <= max && min <= s_max
     }
 }
 

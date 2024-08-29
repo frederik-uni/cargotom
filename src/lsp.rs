@@ -8,7 +8,9 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::crate_lookup::{shared, CratesIoStorage, Shared};
-use crate::generate_tree::{get_after_key, parse_toml, Key, KeyOrValueOwned, Tree, Value};
+use crate::generate_tree::{
+    get_after_key, parse_toml, Key, KeyOrValueOwned, RangeExclusive, Tree, TreeValue, Value,
+};
 
 struct Backend {
     crates: Shared<CratesIoStorage>,
@@ -28,18 +30,57 @@ struct Config {
 struct Store {
     content: String,
     tree: Tree,
+    crates_info: Vec<TreeValue>,
 }
 
 impl Store {
+    pub fn needs_update(&self) -> Vec<(String, RangeExclusive, String)> {
+        //TODO:
+        vec![]
+    }
     pub fn new(s: String) -> Self {
-        Self {
+        let mut s = Self {
             tree: parse_toml(&s),
             content: s,
-        }
+            crates_info: vec![],
+        };
+        s.crates();
+        s
     }
+
     pub fn text(&self) -> &str {
         &self.content
     }
+
+    fn crates(&mut self) {
+        let mut v = self.tree.find("dependencies");
+        v.append(&mut self.tree.find("dev-dependencies"));
+        let v = v
+            .into_iter()
+            .map(|v| match &v.value {
+                Value::Tree(tree) => Ok(&tree.0),
+                Value::NoContent => Err("unexpected type: none"),
+                Value::Array(_) => Err("unexpected type: array"),
+                Value::String { .. } => Err("unexpected type: string"),
+                Value::Bool { .. } => Err("unexpected type: bool"),
+            })
+            .flat_map(|v| v.ok())
+            .flatten()
+            .cloned()
+            .collect::<Vec<_>>();
+        self.crates_info = v;
+    }
+
+    fn find_crate_by_byte_offset_range(
+        &self,
+        byte_offset_start: u32,
+        byte_offset_end: u32,
+    ) -> Option<&TreeValue> {
+        self.crates_info
+            .iter()
+            .find(|v| v.is_in_range(byte_offset_start, byte_offset_end))
+    }
+
     pub fn update(&mut self, params: DidChangeTextDocumentParams) {
         for change in params.content_changes {
             if let Some(range) = change.range {
@@ -53,6 +94,7 @@ impl Store {
         }
         //TODO: dont parse whole toml every time
         self.tree = parse_toml(&self.content);
+        self.crates();
     }
 }
 
@@ -71,6 +113,7 @@ impl LanguageServer for Backend {
             config.per_page_web.unwrap_or(25),
         );
         let capabilities = ServerCapabilities {
+            code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
             text_document_sync: Some(TextDocumentSyncCapability::Options(
                 TextDocumentSyncOptions {
                     open_close: Some(true),
@@ -93,6 +136,99 @@ impl LanguageServer for Backend {
             .await;
     }
 
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri.to_string();
+        if !uri.ends_with("/Cargo.toml") {
+            return Ok(None);
+        }
+        let mut actions = vec![];
+        if let Some(store) = self.toml_store.lock().await.get_mut(&uri) {
+            let byte_offset_start =
+                get_byte_index_from_position(store.text(), params.range.start) as u32;
+            let byte_offset_end =
+                get_byte_index_from_position(store.text(), params.range.end) as u32;
+
+            if let Some(v) =
+                store.find_crate_by_byte_offset_range(byte_offset_start, byte_offset_end)
+            {
+                self.client
+                    .log_message(MessageType::INFO, format!("{:#?}", v))
+                    .await;
+                let crate_name = &v.key.value;
+                let version = "todo:/";
+                let update = store.needs_update();
+                let action = CodeAction {
+                    title: "Open Docs".to_string(),
+                    kind: Some(CodeActionKind::EMPTY),
+                    command: Some(Command {
+                        title: "Open Docs".to_string(),
+                        command: "open_url".to_string(),
+                        arguments: Some(vec![serde_json::Value::String(format!(
+                            "https://docs.rs/r-description/{version}/{crate_name}/"
+                        ))]),
+                    }),
+                    ..CodeAction::default()
+                };
+                actions.push(CodeActionOrCommand::CodeAction(action));
+                let action = CodeAction {
+                    title: "Open crates.io".to_string(),
+                    kind: Some(CodeActionKind::EMPTY),
+                    command: Some(Command {
+                        title: "Open crates.io".to_string(),
+                        command: "open_url".to_string(),
+                        arguments: Some(vec![serde_json::Value::String(format!(
+                            "https://crates.io/crates/{crate_name}/"
+                        ))]),
+                    }),
+                    ..CodeAction::default()
+                };
+                actions.push(CodeActionOrCommand::CodeAction(action));
+
+                if !update.is_empty() {
+                    if let Some((crate_name, range, new)) =
+                        update.iter().find(|(name, _, _)| name == crate_name)
+                    {
+                        let action = CodeAction {
+                            title: "Upgrade".to_string(),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            edit: Some(WorkspaceEdit {
+                                changes: Some(HashMap::new()), // This is where you'd implement your edit logic
+                                ..WorkspaceEdit::default()
+                            }),
+                            ..CodeAction::default()
+                        };
+                        actions.push(CodeActionOrCommand::CodeAction(action));
+                    }
+
+                    let action = CodeAction {
+                        title: "Upgrade All".to_string(),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        edit: Some(WorkspaceEdit {
+                            changes: Some(HashMap::new()), // This is where you'd implement your edit logic
+                            ..WorkspaceEdit::default()
+                        }),
+                        ..CodeAction::default()
+                    };
+                    actions.push(CodeActionOrCommand::CodeAction(action));
+                }
+
+                let action = CodeAction {
+                    title: "Update All".to_string(),
+                    kind: Some(CodeActionKind::EMPTY),
+                    command: Some(Command {
+                        title: "Update All".to_string(),
+                        command: "cargo update".to_string(),
+                        arguments: None,
+                    }),
+                    ..CodeAction::default()
+                };
+                actions.push(CodeActionOrCommand::CodeAction(action));
+            }
+        }
+
+        Ok(Some(actions))
+    }
+
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.to_string();
         if !uri.ends_with("/Cargo.toml") {
@@ -111,7 +247,11 @@ impl LanguageServer for Backend {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let text = params.text_document.text;
         let uri = params.text_document.uri.to_string();
-        self.toml_store.lock().await.insert(uri, Store::new(text));
+        let _ = self
+            .toml_store
+            .lock()
+            .await
+            .insert(uri.clone(), Store::new(text));
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -137,6 +277,7 @@ impl LanguageServer for Backend {
                     drop(lock);
                     match path.len() {
                         1 => {
+                            //todo: use  pub text_edit:
                             let crate_ = &path[0];
                             if let KeyOrValueOwned::Key(key) = crate_ {
                                 let result = self.crates.lock().await.search(&key.value).await;
@@ -159,7 +300,8 @@ impl LanguageServer for Backend {
                             if let KeyOrValueOwned::Key(key) = crate_ {
                                 match part2 {
                                     KeyOrValueOwned::Key(_) => {
-                                        //todo:
+                                        //todo: suggest version with the version string
+                                        //todo: use additional_text_edits to close }
                                     }
                                     KeyOrValueOwned::Value(Value::String { value, .. }) => {
                                         if let Some(v) = self
