@@ -1,52 +1,134 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 
+pub enum SearchCacheEntry {
+    Pending(Arc<Notify>),
+    Ready(Vec<Crate>),
+}
+
+pub enum InfoCacheEntry {
+    Pending(Arc<Notify>),
+    Ready(Vec<VersionExport>),
+}
+
 impl CratesIoStorage {
-    pub async fn search_online(&self, query: &str) -> reqwest::Result<Vec<Crate>> {
-        if let Some(v) = self.search_cache.lock().await.get(query) {
-            return Ok(v.clone());
+    pub async fn search_online(&self, query: &str) -> Result<Vec<Crate>, reqwest::Error> {
+        let notify = Arc::new(Notify::new());
+        let cache_lock = self.search_cache.lock().await;
+
+        if let Some(entry) = cache_lock.get(query) {
+            match entry {
+                SearchCacheEntry::Pending(existing_notify) => {
+                    let cloned_notify = existing_notify.clone();
+                    drop(cache_lock);
+                    cloned_notify.notified().await;
+
+                    let cache_lock = self.search_cache.lock().await;
+                    if let Some(SearchCacheEntry::Ready(result)) = cache_lock.get(query) {
+                        return Ok(result.clone());
+                    }
+                }
+                SearchCacheEntry::Ready(result) => {
+                    return Ok(result.clone());
+                }
+            }
         }
+
+        {
+            let mut cache_lock = self.search_cache.lock().await;
+            cache_lock.insert(query.to_string(), SearchCacheEntry::Pending(notify.clone()));
+        }
+
         let url = format!(
             "https://crates.io/api/v1/crates?page=1&per_page={}&q={}&sort=relevance",
             self.per_page,
             urlencoding::encode(query)
         );
-        let res: SearchResponse = self
-            .client
-            .get(&url)
-            .header(USER_AGENT, "zed")
-            .send()
-            .await?
-            .json()
-            .await?;
-        self.search_cache
-            .lock()
-            .await
-            .insert(query.to_string(), res.crates.clone());
-        Ok(res.crates)
+
+        let res = self.client.get(&url).header(USER_AGENT, "zed").send().await;
+        let res: Result<SearchResponse, _> = match res {
+            Ok(v) => v.json().await,
+            Err(e) => Err(e),
+        };
+
+        match res {
+            Ok(search_response) => {
+                let mut cache_lock = self.search_cache.lock().await;
+                cache_lock.insert(
+                    query.to_string(),
+                    SearchCacheEntry::Ready(search_response.crates.clone()),
+                );
+                notify.notify_waiters();
+                Ok(search_response.crates)
+            }
+            Err(e) => {
+                let mut cache_lock = self.search_cache.lock().await;
+                cache_lock.remove(query);
+                notify.notify_waiters();
+                Err(e)
+            }
+        }
     }
 
-    pub async fn versions_features(&self, crate_name: &str) -> reqwest::Result<Vec<VersionExport>> {
-        let url = format!("https://crates.io/api/v1/crates/{}/versions", crate_name);
-        if let Some(v) = self.versions_cache.lock().await.get(crate_name) {
-            return Ok(v.clone());
+    pub async fn versions_features(
+        &self,
+        query: &str,
+    ) -> Result<Vec<VersionExport>, reqwest::Error> {
+        let notify = Arc::new(Notify::new());
+        let cache_lock = self.versions_cache.lock().await;
+
+        if let Some(entry) = cache_lock.get(query) {
+            match entry {
+                InfoCacheEntry::Pending(existing_notify) => {
+                    let cloned_notify = existing_notify.clone();
+                    drop(cache_lock);
+                    cloned_notify.notified().await;
+
+                    let cache_lock = self.versions_cache.lock().await;
+                    if let Some(InfoCacheEntry::Ready(result)) = cache_lock.get(query) {
+                        return Ok(result.clone());
+                    }
+                }
+                InfoCacheEntry::Ready(result) => {
+                    return Ok(result.clone());
+                }
+            }
         }
-        let res: VersionResponse = self
-            .client
-            .get(&url)
-            .header(USER_AGENT, "zed")
-            .send()
-            .await?
-            .json()
-            .await?;
-        let versions = res.versions();
-        self.versions_cache
-            .lock()
-            .await
-            .insert(crate_name.to_string(), versions.clone());
-        Ok(versions)
+
+        {
+            let mut cache_lock = self.versions_cache.lock().await;
+            cache_lock.insert(query.to_string(), InfoCacheEntry::Pending(notify.clone()));
+        }
+
+        let url = format!(
+            "https://crates.io/api/v1/crates?page=1&per_page={}&q={}&sort=relevance",
+            self.per_page,
+            urlencoding::encode(query)
+        );
+
+        let res = self.client.get(&url).header(USER_AGENT, "zed").send().await;
+        let res: Result<VersionResponse, _> = match res {
+            Ok(v) => v.json().await,
+            Err(e) => Err(e),
+        };
+
+        match res {
+            Ok(search_response) => {
+                let mut cache_lock = self.versions_cache.lock().await;
+                let versions = search_response.versions();
+                cache_lock.insert(query.to_string(), InfoCacheEntry::Ready(versions.clone()));
+                notify.notify_waiters();
+                Ok(versions)
+            }
+            Err(e) => {
+                let mut cache_lock = self.search_cache.lock().await;
+                cache_lock.remove(query);
+                notify.notify_waiters();
+                Err(e)
+            }
+        }
     }
 }
 
@@ -65,6 +147,7 @@ struct SearchResponse {
 }
 
 use serde_json::Value;
+use tokio::sync::Notify;
 
 use crate::crate_lookup::CratesIoStorage;
 
