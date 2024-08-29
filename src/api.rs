@@ -174,9 +174,99 @@ pub struct VersionExport {
 
 #[derive(Debug, Clone)]
 pub struct RustVersion {
-    major: Option<String>,
-    minor: Option<String>,
-    patch: Option<String>,
+    major: Option<VersionString>,
+    minor: Option<VersionString>,
+    patch: Option<VersionString>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct VersionString(String);
+
+impl VersionString {
+    fn int_or_string(&self) -> Vec<IntOrString> {
+        let mut out = vec![];
+        let mut builder = vec![];
+        let mut number = false;
+        let build = |number, builder: &mut Vec<char>, out: &mut Vec<IntOrString>| {
+            if !builder.is_empty() {
+                let val = builder.drain(..).collect::<String>();
+                match number {
+                    true => out.push(IntOrString::Int(val.parse().unwrap())),
+                    false => out.push(IntOrString::String(val)),
+                }
+            }
+        };
+        for char in self.0.chars() {
+            if number != char.is_ascii_digit() {
+                build(number, &mut builder, &mut out);
+                number = !number;
+            }
+            builder.push(char);
+        }
+        build(number, &mut builder, &mut out);
+        out
+    }
+}
+
+#[derive(PartialEq, Eq)]
+enum IntOrString {
+    Int(u64),
+    String(String),
+}
+
+impl PartialOrd for IntOrString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for IntOrString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (IntOrString::Int(a), IntOrString::Int(b)) => a.cmp(b),
+            (IntOrString::Int(_), IntOrString::String(_)) => Ordering::Greater,
+            (IntOrString::String(_), IntOrString::Int(_)) => Ordering::Less,
+            (IntOrString::String(a), IntOrString::String(b)) => a.cmp(b),
+        }
+    }
+}
+
+impl Ord for VersionString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut iter_a = self.int_or_string().into_iter();
+        let mut iter_b = other.int_or_string().into_iter();
+        loop {
+            match (iter_a.next(), iter_b.next()) {
+                (Some(elem_a), Some(elem_b)) => {
+                    let cmp_result = elem_a.cmp(&elem_b);
+                    if cmp_result != Ordering::Equal {
+                        return cmp_result;
+                    }
+                }
+                (Some(_), None) => return Ordering::Greater,
+                (None, Some(_)) => return Ordering::Less,
+                (None, None) => return Ordering::Equal,
+            }
+        }
+    }
+}
+
+impl PartialOrd for VersionString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Display for VersionString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl From<String> for VersionString {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
 }
 
 impl Ord for RustVersion {
@@ -237,16 +327,16 @@ impl From<&str> for RustVersion {
         match items.len() {
             0 => {}
             1 => {
-                se.major = Some(items[0].to_string());
+                se.major = Some(items[0].to_string().into());
             }
             2 => {
-                se.major = Some(items[0].to_string());
-                se.minor = Some(items[1].to_string());
+                se.major = Some(items[0].to_string().into());
+                se.minor = Some(items[1].to_string().into());
             }
             3 => {
-                se.major = Some(items[0].to_string());
-                se.minor = Some(items[1].to_string());
-                se.patch = Some(items[2].to_string());
+                se.major = Some(items[0].to_string().into());
+                se.minor = Some(items[1].to_string().into());
+                se.patch = Some(items[2].to_string().into());
             }
             _ => {}
         };

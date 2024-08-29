@@ -65,6 +65,7 @@ impl Store {
                     .filter(|v| v > &crate_version)
                     .collect::<Vec<_>>();
                 versions.sort();
+
                 if let Some(v) = versions.pop() {
                     updates.push((crate_name.clone(), range, v.to_string()));
                 }
@@ -190,7 +191,6 @@ impl LanguageServer for Backend {
                     .log_message(MessageType::INFO, format!("{:#?}", v))
                     .await;
                 let crate_name = &v.key.value;
-                let version = "todo:/";
                 let update = store.needs_update(&self.crates).await;
                 let action = CodeAction {
                     title: "Open Docs".to_string(),
@@ -199,7 +199,7 @@ impl LanguageServer for Backend {
                         title: "Open Docs".to_string(),
                         command: "open_url".to_string(),
                         arguments: Some(vec![serde_json::Value::String(format!(
-                            "https://docs.rs/r-description/{version}/{crate_name}/"
+                            "https://docs.rs/{crate_name}/latest/{crate_name}/"
                         ))]),
                     }),
                     ..CodeAction::default()
@@ -232,19 +232,31 @@ impl LanguageServer for Backend {
                             title: "Upgrade".to_string(),
                             kind: Some(CodeActionKind::QUICKFIX),
                             edit: Some(WorkspaceEdit {
-                                changes: Some(vec![(uri_, vec![edit])].into_iter().collect()), // This is where you'd implement your edit logic
+                                changes: Some(
+                                    vec![(uri_.clone(), vec![edit])].into_iter().collect(),
+                                ),
                                 ..WorkspaceEdit::default()
                             }),
                             ..CodeAction::default()
                         };
                         actions.push(CodeActionOrCommand::CodeAction(action));
                     }
+                    let changes = update
+                        .into_iter()
+                        .map(|(_, range, new)| {
+                            let mut start = store.byte_offset_to_position(range.start);
+                            start.character += 1;
+                            let mut end = store.byte_offset_to_position(range.end);
+                            end.character -= 1;
+                            TextEdit::new(Range::new(start, end), new)
+                        })
+                        .collect();
 
                     let action = CodeAction {
                         title: "Upgrade All".to_string(),
                         kind: Some(CodeActionKind::QUICKFIX),
                         edit: Some(WorkspaceEdit {
-                            changes: Some(HashMap::new()), // This is where you'd implement your edit logic
+                            changes: Some(vec![(uri_, changes)].into_iter().collect()),
                             ..WorkspaceEdit::default()
                         }),
                         ..CodeAction::default()
