@@ -12,15 +12,15 @@ use tokio::{sync::Mutex, time::sleep};
 use trie_rs::map::{Trie, TrieBuilder};
 
 use crate::{
-    api::{Crate, RustVersion, VersionExport},
+    api::{InfoCacheEntry, RustVersion, SearchCacheEntry},
     git::updated_local_git,
 };
 
 pub type Shared<T> = Arc<Mutex<T>>;
 #[derive(Clone)]
 pub struct CratesIoStorage {
-    pub search_cache: Shared<HashMap<String, Vec<Crate>>>,
-    pub versions_cache: Shared<HashMap<String, Vec<VersionExport>>>,
+    pub search_cache: Shared<HashMap<String, SearchCacheEntry>>,
+    pub versions_cache: Shared<HashMap<String, InfoCacheEntry>>,
     last_checked: Shared<Duration>,
     updating: Shared<bool>,
     pub client: Client,
