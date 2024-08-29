@@ -150,6 +150,37 @@ impl CratesIoStorage {
         }
     }
 
+    pub async fn get_version_local(&self, name: &str) -> Option<Vec<RustVersion>> {
+        let lock = self.data.lock().await;
+        if let Some(v) = &*lock {
+            let search = v.exact_match(normalize_key(name))?;
+            let (_, versions) = search
+                .iter()
+                .find(|v| v.0.to_lowercase() == name.to_lowercase())?;
+            Some(
+                versions
+                    .iter()
+                    .map(|v| RustVersion::from(v.as_str()))
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            let v = self.versions_cache.lock().await;
+            match v.get(name) {
+                Some(v) => match v {
+                    InfoCacheEntry::Pending(_) => None,
+                    InfoCacheEntry::Ready(v) => Some(v.iter().map(|v| v.version.clone()).collect()),
+                },
+                None => {
+                    //INFO: thats probably fine, bc CratesIoStorage will exist until the lsp is stopped
+                    let cpy = unsafe { (self as *const Self).as_ref() }.unwrap();
+                    let name = name.to_string();
+                    tokio::spawn(async move { cpy.search_online(&name).await });
+                    None
+                }
+            }
+        }
+    }
+
     pub async fn get_features(&self, name: &str, version: &str, search: &str) -> Vec<String> {
         let search = search.to_lowercase();
         let temp = self.versions_features(name).await.ok();

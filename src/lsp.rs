@@ -7,6 +7,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+use crate::api::RustVersion;
 use crate::crate_lookup::{shared, CratesIoStorage, Shared};
 use crate::generate_tree::{
     get_after_key, parse_toml, Key, KeyOrValueOwned, RangeExclusive, Tree, TreeValue, Value,
@@ -34,9 +35,42 @@ struct Store {
 }
 
 impl Store {
-    pub fn needs_update(&self) -> Vec<(String, RangeExclusive, String)> {
-        //TODO:
-        vec![]
+    pub fn byte_offset_to_position(&self, byte_offset: u32) -> Position {
+        let byte_offset = byte_offset as usize;
+
+        let content_slice = &self.content[..byte_offset];
+
+        let line = content_slice.chars().filter(|&c| c == '\n').count() as u32;
+
+        let line_start = content_slice.rfind('\n').map_or(0, |pos| pos + 1);
+        let character = content_slice[line_start..].chars().count() as u32;
+        Position::new(line, character)
+    }
+
+    pub async fn needs_update(
+        &self,
+        crates: &Arc<Mutex<CratesIoStorage>>,
+    ) -> Vec<(String, RangeExclusive, String)> {
+        let lock = crates.lock().await;
+        let mut updates = vec![];
+        for cr in self.crates_info.iter() {
+            let crate_name = &cr.key.value;
+            if let Some((version, range)) = cr.get_version() {
+                let crate_version = RustVersion::from(version.as_str());
+                let mut versions = lock
+                    .get_version_local(crate_name)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|v| v > &crate_version)
+                    .collect::<Vec<_>>();
+                versions.sort();
+                if let Some(v) = versions.pop() {
+                    updates.push((crate_name.clone(), range, v.to_string()));
+                }
+            }
+        }
+        updates
     }
     pub fn new(s: String) -> Self {
         let mut s = Self {
@@ -137,7 +171,8 @@ impl LanguageServer for Backend {
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        let uri = params.text_document.uri.to_string();
+        let uri_ = params.text_document.uri;
+        let uri = uri_.to_string();
         if !uri.ends_with("/Cargo.toml") {
             return Ok(None);
         }
@@ -156,7 +191,7 @@ impl LanguageServer for Backend {
                     .await;
                 let crate_name = &v.key.value;
                 let version = "todo:/";
-                let update = store.needs_update();
+                let update = store.needs_update(&self.crates).await;
                 let action = CodeAction {
                     title: "Open Docs".to_string(),
                     kind: Some(CodeActionKind::EMPTY),
@@ -185,14 +220,19 @@ impl LanguageServer for Backend {
                 actions.push(CodeActionOrCommand::CodeAction(action));
 
                 if !update.is_empty() {
-                    if let Some((crate_name, range, new)) =
+                    if let Some((_, range, new)) =
                         update.iter().find(|(name, _, _)| name == crate_name)
                     {
+                        let mut start = store.byte_offset_to_position(range.start);
+                        start.character += 1;
+                        let mut end = store.byte_offset_to_position(range.end);
+                        end.character -= 1;
+                        let edit = TextEdit::new(Range::new(start, end), new.to_string());
                         let action = CodeAction {
                             title: "Upgrade".to_string(),
                             kind: Some(CodeActionKind::QUICKFIX),
                             edit: Some(WorkspaceEdit {
-                                changes: Some(HashMap::new()), // This is where you'd implement your edit logic
+                                changes: Some(vec![(uri_, vec![edit])].into_iter().collect()), // This is where you'd implement your edit logic
                                 ..WorkspaceEdit::default()
                             }),
                             ..CodeAction::default()

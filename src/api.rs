@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, fmt::Display, sync::Arc};
 
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
@@ -74,12 +74,12 @@ impl CratesIoStorage {
 
     pub async fn versions_features(
         &self,
-        query: &str,
+        name: &str,
     ) -> Result<Vec<VersionExport>, reqwest::Error> {
         let notify = Arc::new(Notify::new());
         let cache_lock = self.versions_cache.lock().await;
 
-        if let Some(entry) = cache_lock.get(query) {
+        if let Some(entry) = cache_lock.get(name) {
             match entry {
                 InfoCacheEntry::Pending(existing_notify) => {
                     let cloned_notify = existing_notify.clone();
@@ -87,7 +87,7 @@ impl CratesIoStorage {
                     cloned_notify.notified().await;
 
                     let cache_lock = self.versions_cache.lock().await;
-                    if let Some(InfoCacheEntry::Ready(result)) = cache_lock.get(query) {
+                    if let Some(InfoCacheEntry::Ready(result)) = cache_lock.get(name) {
                         return Ok(result.clone());
                     }
                 }
@@ -99,14 +99,10 @@ impl CratesIoStorage {
 
         {
             let mut cache_lock = self.versions_cache.lock().await;
-            cache_lock.insert(query.to_string(), InfoCacheEntry::Pending(notify.clone()));
+            cache_lock.insert(name.to_string(), InfoCacheEntry::Pending(notify.clone()));
         }
 
-        let url = format!(
-            "https://crates.io/api/v1/crates?page=1&per_page={}&q={}&sort=relevance",
-            self.per_page,
-            urlencoding::encode(query)
-        );
+        let url = format!("https://crates.io/api/v1/crates/{}/versions", name);
 
         let res = self.client.get(&url).header(USER_AGENT, "zed").send().await;
         let res: Result<VersionResponse, _> = match res {
@@ -118,13 +114,13 @@ impl CratesIoStorage {
             Ok(search_response) => {
                 let mut cache_lock = self.versions_cache.lock().await;
                 let versions = search_response.versions();
-                cache_lock.insert(query.to_string(), InfoCacheEntry::Ready(versions.clone()));
+                cache_lock.insert(name.to_string(), InfoCacheEntry::Ready(versions.clone()));
                 notify.notify_waiters();
                 Ok(versions)
             }
             Err(e) => {
                 let mut cache_lock = self.search_cache.lock().await;
-                cache_lock.remove(query);
+                cache_lock.remove(name);
                 notify.notify_waiters();
                 Err(e)
             }
@@ -181,6 +177,35 @@ pub struct RustVersion {
     major: Option<String>,
     minor: Option<String>,
     patch: Option<String>,
+}
+
+impl Ord for RustVersion {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (&self.major, &other.major) {
+            (Some(self_major), Some(other_major)) => self_major.cmp(other_major),
+            (Some(_), None) => Ordering::Less, // Some major < None (None is treated as highest)
+            (None, Some(_)) => Ordering::Greater, // None > Some major
+            (None, None) => Ordering::Equal,
+        }
+        .then_with(|| match (&self.minor, &other.minor) {
+            (Some(self_minor), Some(other_minor)) => self_minor.cmp(other_minor),
+            (Some(_), None) => Ordering::Less, // Some minor < None (None is treated as highest)
+            (None, Some(_)) => Ordering::Greater, // None > Some minor
+            (None, None) => Ordering::Equal,
+        })
+        .then_with(|| match (&self.patch, &other.patch) {
+            (Some(self_patch), Some(other_patch)) => self_patch.cmp(other_patch),
+            (Some(_), None) => Ordering::Less, // Some patch < None (None is treated as highest)
+            (None, Some(_)) => Ordering::Greater, // None > Some patch
+            (None, None) => Ordering::Equal,
+        })
+    }
+}
+
+impl PartialOrd for RustVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Display for RustVersion {

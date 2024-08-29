@@ -34,6 +34,10 @@ impl TreeValue {
         }
         min
     }
+
+    pub fn get_version(&self) -> Option<(String, RangeExclusive)> {
+        self.value.get_version()
+    }
     fn max(&self) -> u32 {
         let mut max = self.key.range.end;
 
@@ -113,16 +117,13 @@ pub(crate) struct Key {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
 pub struct RangeExclusive {
-    start: u32,
-    end: u32,
+    pub start: u32,
+    pub end: u32,
 }
 
 impl RangeExclusive {
     pub fn contains_inclusive(&self, pos: u32) -> bool {
         self.start <= pos && pos <= self.end
-    }
-    fn overlaps(&self, start: u32, end: u32) -> bool {
-        self.start <= end && start <= self.end
     }
 }
 
@@ -151,6 +152,15 @@ pub(crate) enum Value {
 }
 
 impl Value {
+    fn get_version(&self) -> Option<(String, RangeExclusive)> {
+        match &self {
+            Value::Tree(tree) => tree.get("version").and_then(|v| v.get_version()),
+            Value::NoContent => None,
+            Value::Array(_) => None,
+            Value::String { value, range } => Some((value.clone(), range.clone())),
+            Value::Bool { .. } => None,
+        }
+    }
     fn min(&self) -> Option<u32> {
         match self {
             Value::Tree(v) => v.min(),
