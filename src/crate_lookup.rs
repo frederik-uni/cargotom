@@ -174,9 +174,32 @@ impl CratesIoStorage {
                     //INFO: thats probably fine, bc CratesIoStorage will exist until the lsp is stopped
                     let cpy = unsafe { (self as *const Self).as_ref() }.unwrap();
                     let name = name.to_string();
-                    tokio::spawn(async move { cpy.search_online(&name).await });
+                    tokio::spawn(async move { cpy.versions_features(&name).await });
                     None
                 }
+            }
+        }
+    }
+
+    pub async fn get_features_local(&self, name: &str, version: &str) -> Option<Vec<String>> {
+        let version = RustVersion::from(version);
+        let v = self.versions_cache.read().await;
+        match v.get(name) {
+            Some(v) => match v {
+                InfoCacheEntry::Pending(_) => None,
+                InfoCacheEntry::Ready(v) => Some(
+                    v.iter()
+                        .find(|v| &v.version == &version)
+                        .map(|b| b.features.clone())
+                        .unwrap_or_default(),
+                ),
+            },
+            None => {
+                //INFO: thats probably fine, bc CratesIoStorage will exist until the lsp is stopped
+                let cpy = unsafe { (self as *const Self).as_ref() }.unwrap();
+                let name = name.to_string();
+                tokio::spawn(async move { cpy.versions_features(&name).await });
+                None
             }
         }
     }

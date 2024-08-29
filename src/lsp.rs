@@ -47,6 +47,30 @@ impl Store {
         Position::new(line, character)
     }
 
+    pub async fn unknown_features(
+        &self,
+        crates: &Shared<CratesIoStorage>,
+    ) -> Vec<(String, RangeExclusive, String)> {
+        let lock = crates.read().await;
+        let mut res = vec![];
+        for cr in self.crates_info.iter() {
+            let crate_name = &cr.key.value;
+            if let Some((version, _)) = cr.get_version() {
+                let features = lock.get_features_local(crate_name, &version).await;
+                let existing_features = cr.get_features();
+                if let Some(features) = features {
+                    let mut existing_features = existing_features
+                        .into_iter()
+                        .filter(|(name, _)| !features.contains(name))
+                        .map(|(feature, range)| (crate_name.clone(), range, feature))
+                        .collect::<Vec<_>>();
+                    res.append(&mut existing_features);
+                }
+            }
+        }
+        res
+    }
+
     pub async fn needs_update(
         &self,
         crates: &Shared<CratesIoStorage>,
@@ -73,6 +97,7 @@ impl Store {
         }
         updates
     }
+
     pub fn new(s: String) -> Self {
         let mut s = Self {
             tree: parse_toml(&s),
@@ -280,7 +305,7 @@ impl LanguageServer for Backend {
                             }),
                             ..CodeAction::default()
                         };
-                        actions.push(CodeActionOrCommand::CodeAction(action));
+                        actions.insert(0, CodeActionOrCommand::CodeAction(action));
                     }
                     let changes = update
                         .into_iter()
@@ -323,13 +348,18 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = params.text_document.uri.to_string();
+        let uri_ = params.text_document.uri.clone();
+        let uri = uri_.to_string();
         if !uri.ends_with("/Cargo.toml") {
             return;
         }
         if let Some(v) = self.toml_store.lock().await.get_mut(&uri) {
             v.update(params);
         }
+        let diagnostics = self.analyze(&uri).await;
+        self.client
+            .publish_diagnostics(uri_, diagnostics, None)
+            .await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -345,6 +375,10 @@ impl LanguageServer for Backend {
             .lock()
             .await
             .insert(uri.clone(), Store::new(text));
+        let diagnostics = self.analyze(&uri).await;
+        self.client
+            .publish_diagnostics(params.text_document.uri, diagnostics, None)
+            .await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -535,6 +569,52 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
+    async fn analyze(&self, uri: &str) -> Vec<Diagnostic> {
+        if let Some(store) = self.toml_store.lock().await.get(uri) {
+            let updates = store.needs_update(&self.crates).await;
+            let mut items = updates
+                .into_iter()
+                .map(|(name, range, new)| {
+                    let mut start = store.byte_offset_to_position(range.start);
+                    start.character += 1;
+                    let mut end = store.byte_offset_to_position(range.end);
+                    end.character -= 1;
+                    Diagnostic::new(
+                        Range::new(start, end),
+                        Some(DiagnosticSeverity::WARNING),
+                        None,
+                        None,
+                        format!("A newer version is available for crate `{name}`: {new} "),
+                        None,
+                        None,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let unknown_features = store.unknown_features(&self.crates).await;
+            items.append(
+                &mut unknown_features
+                    .into_iter()
+                    .map(|(name, range, feature)| {
+                        let mut start = store.byte_offset_to_position(range.start);
+                        start.character += 1;
+                        let mut end = store.byte_offset_to_position(range.end);
+                        end.character -= 1;
+                        Diagnostic::new(
+                            Range::new(start, end),
+                            Some(DiagnosticSeverity::ERROR),
+                            None,
+                            None,
+                            format!("Unknown feature `{feature}` for crate `{name}` "),
+                            None,
+                            None,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            return items;
+        }
+        vec![]
+    }
     async fn get_version_for_features(&self, uri: &str, expanded_key: &Key) -> Option<String> {
         let lock = self.toml_store.lock().await;
         let data = lock.get(uri)?;

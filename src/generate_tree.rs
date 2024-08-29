@@ -38,6 +38,11 @@ impl TreeValue {
     pub fn get_version(&self) -> Option<(String, RangeExclusive)> {
         self.value.get_version()
     }
+
+    pub fn get_features(&self) -> Vec<(String, RangeExclusive)> {
+        self.value.get_features()
+    }
+
     fn max(&self) -> u32 {
         let mut max = self.key.range.end;
 
@@ -165,6 +170,25 @@ impl Value {
             Value::Array(_) => None,
             Value::String { value, range } => Some((value.clone(), range.clone())),
             Value::Bool { .. } => None,
+        }
+    }
+
+    fn get_features(&self) -> Vec<(String, RangeExclusive)> {
+        match &self {
+            Value::Tree { value, .. } => value
+                .get("features")
+                .map(|v| v.get_features())
+                .unwrap_or_default(),
+            Value::NoContent => vec![],
+            Value::Array(v) => v
+                .iter()
+                .flat_map(|v| match v {
+                    Value::String { value, range } => vec![(value.clone(), range.clone())],
+                    _ => vec![],
+                })
+                .collect(),
+            Value::String { .. } => vec![],
+            Value::Bool { .. } => vec![],
         }
     }
     fn min(&self) -> Option<u32> {
