@@ -187,9 +187,6 @@ impl LanguageServer for Backend {
             if let Some(v) =
                 store.find_crate_by_byte_offset_range(byte_offset_start, byte_offset_end)
             {
-                self.client
-                    .log_message(MessageType::INFO, format!("{:#?}", v))
-                    .await;
                 let crate_name = &v.key.value;
                 let update = store.needs_update(&self.crates).await;
                 let action = CodeAction {
@@ -410,7 +407,7 @@ impl LanguageServer for Backend {
                                                     return Ok(Some(CompletionResponse::Array(v)));
                                                 }
                                             }
-                                            "version}" => {
+                                            "version" => {
                                                 if let Some(v) = self
                                                     .crates
                                                     .read()

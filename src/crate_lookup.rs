@@ -8,10 +8,8 @@ type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<String>)>>>;
 
 use reqwest::Client;
 use taplo::HashMap;
-use tokio::{
-    sync::{Mutex, RwLock},
-    time::sleep,
-};
+use tokio::{sync::RwLock, time::sleep};
+use tower_lsp::lsp_types::MessageType;
 use trie_rs::map::{Trie, TrieBuilder};
 
 use crate::{
@@ -187,7 +185,6 @@ impl CratesIoStorage {
     pub async fn get_features(&self, name: &str, version: &str, search: &str) -> Vec<String> {
         let search = search.to_lowercase();
         let temp = self.versions_features(name).await.ok();
-
         temp.and_then(|v| {
             v.into_iter()
                 .find(|v| v.matches_version(version))
