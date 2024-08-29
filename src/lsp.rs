@@ -93,7 +93,7 @@ impl Store {
         let v = v
             .into_iter()
             .map(|v| match &v.value {
-                Value::Tree(tree) => Ok(&tree.0),
+                Value::Tree { value, .. } => Ok(&value.0),
                 Value::NoContent => Err("unexpected type: none"),
                 Value::Array(_) => Err("unexpected type: array"),
                 Value::String { .. } => Err("unexpected type: string"),
@@ -188,6 +188,50 @@ impl LanguageServer for Backend {
                 store.find_crate_by_byte_offset_range(byte_offset_start, byte_offset_end)
             {
                 let crate_name = &v.key.value;
+                if let (Some(range), Some((version, _))) = (v.value.range(), v.get_version()) {
+                    let start = store.byte_offset_to_position(range.start);
+                    let end = store.byte_offset_to_position(range.end);
+                    let range = Range::new(start, end);
+                    let action = match v.value.is_str() {
+                        true => CodeAction {
+                            title: "Expand dependency specification".to_string(),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            edit: Some(WorkspaceEdit {
+                                changes: Some(
+                                    vec![(
+                                        uri_.clone(),
+                                        vec![TextEdit::new(
+                                            range,
+                                            format!("{} version = \"{}\" {}", '{', version, '}'),
+                                        )],
+                                    )]
+                                    .into_iter()
+                                    .collect(),
+                                ),
+                                ..WorkspaceEdit::default()
+                            }),
+                            ..CodeAction::default()
+                        },
+                        false => CodeAction {
+                            title: "Collapse dependency specification".to_string(),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            edit: Some(WorkspaceEdit {
+                                changes: Some(
+                                    vec![(
+                                        uri_.clone(),
+                                        vec![TextEdit::new(range, format!("\"{}\"", version))],
+                                    )]
+                                    .into_iter()
+                                    .collect(),
+                                ),
+                                ..WorkspaceEdit::default()
+                            }),
+                            ..CodeAction::default()
+                        },
+                    };
+                    actions.push(CodeActionOrCommand::CodeAction(action));
+                }
+
                 let update = store.needs_update(&self.crates).await;
                 let action = CodeAction {
                     title: "Open Docs".to_string(),

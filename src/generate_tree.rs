@@ -59,7 +59,7 @@ impl Value {
     }
     fn by_key(&self, key: &Key) -> Option<&Tree> {
         match self {
-            Value::Tree(v) => v.by_key(key),
+            Value::Tree { value, .. } => value.by_key(key),
             Value::NoContent => None,
             Value::Array(v) => v.iter().find_map(|v| v.by_key(key)),
             Value::String { .. } => None,
@@ -71,7 +71,7 @@ impl Value {
 impl Value {
     fn find(&self, str: &str) -> Vec<&TreeValue> {
         match self {
-            Value::Tree(tree) => tree.find(str),
+            Value::Tree { value, .. } => value.find(str),
             Value::Array(v) => v.iter().flat_map(|v| v.find(str)).collect(),
             _ => vec![],
         }
@@ -80,8 +80,8 @@ impl Value {
     fn get_item_by_pos(&self, byte_offset: u32) -> Option<Vec<KeyOrValue<'_>>> {
         let mut path = vec![];
         match self {
-            Value::Tree(v) => {
-                if let Some(mut v) = v.get_item_by_pos(byte_offset) {
+            Value::Tree { value, .. } => {
+                if let Some(mut v) = value.get_item_by_pos(byte_offset) {
                     path.append(&mut v);
                 }
             }
@@ -138,7 +138,10 @@ impl From<TextRange> for RangeExclusive {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Value {
-    Tree(Tree),
+    Tree {
+        value: Tree,
+        range: RangeExclusive,
+    },
     NoContent,
     Array(Vec<Value>),
     String {
@@ -152,9 +155,12 @@ pub(crate) enum Value {
 }
 
 impl Value {
+    pub fn is_str(&self) -> bool {
+        matches!(self, Self::String { .. })
+    }
     fn get_version(&self) -> Option<(String, RangeExclusive)> {
         match &self {
-            Value::Tree(tree) => tree.get("version").and_then(|v| v.get_version()),
+            Value::Tree { value, .. } => value.get("version").and_then(|v| v.get_version()),
             Value::NoContent => None,
             Value::Array(_) => None,
             Value::String { value, range } => Some((value.clone(), range.clone())),
@@ -163,7 +169,7 @@ impl Value {
     }
     fn min(&self) -> Option<u32> {
         match self {
-            Value::Tree(v) => v.min(),
+            Value::Tree { value, .. } => value.min(),
             Value::NoContent => None,
             Value::Array(items) => items.iter().flat_map(|v| v.min()).min(),
             Value::String { range, .. } => Some(range.start),
@@ -172,16 +178,16 @@ impl Value {
     }
     fn max(&self) -> Option<u32> {
         match self {
-            Value::Tree(v) => v.max(),
+            Value::Tree { value, .. } => value.max(),
             Value::NoContent => None,
             Value::Array(items) => items.iter().flat_map(|v| v.max()).max(),
             Value::String { range, .. } => Some(range.end),
             Value::Bool { range, .. } => Some(range.end),
         }
     }
-    fn range(&self) -> Option<&RangeExclusive> {
+    pub fn range(&self) -> Option<&RangeExclusive> {
         match self {
-            Value::Tree(_) => None,
+            Value::Tree { range, .. } => Some(range),
             Value::NoContent => None,
             Value::Array(_) => None,
             Value::String { range, .. } => Some(range),
@@ -190,7 +196,14 @@ impl Value {
     }
     fn from_node(node: &Node) -> Option<Self> {
         Some(match node {
-            taplo::dom::Node::Table(table) => Value::Tree(Tree::from_table(table)),
+            taplo::dom::Node::Table(table) => Value::Tree {
+                value: Tree::from_table(table),
+                range: match table.inner.syntax.as_ref().unwrap() {
+                    taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
+                    taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
+                }
+                .into(),
+            },
             taplo::dom::Node::Array(arr) => Value::Array(
                 arr.items()
                     .get()
