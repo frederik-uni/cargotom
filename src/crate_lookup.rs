@@ -9,7 +9,6 @@ type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<String>)>>>;
 use reqwest::Client;
 use taplo::HashMap;
 use tokio::{sync::RwLock, time::sleep};
-use tower_lsp::lsp_types::MessageType;
 use trie_rs::map::{Trie, TrieBuilder};
 
 use crate::{

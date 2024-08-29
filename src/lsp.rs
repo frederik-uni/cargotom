@@ -326,7 +326,6 @@ impl LanguageServer for Backend {
                     drop(lock);
                     match path.len() {
                         1 => {
-                            //todo: use  pub text_edit:
                             let crate_ = &path[0];
                             if let KeyOrValueOwned::Key(key) = crate_ {
                                 let result = self.crates.read().await.search(&key.value).await;
@@ -352,7 +351,7 @@ impl LanguageServer for Backend {
                                         //todo: suggest version with the version string
                                         //todo: use additional_text_edits to close }
                                     }
-                                    KeyOrValueOwned::Value(Value::String { value, .. }) => {
+                                    KeyOrValueOwned::Value(Value::String { value, range }) => {
                                         if let Some(v) = self
                                             .crates
                                             .read()
@@ -360,11 +359,31 @@ impl LanguageServer for Backend {
                                             .get_versions(&key.value, value)
                                             .await
                                         {
+                                            let range = {
+                                                let lock = self.toml_store.lock().await;
+                                                if let Some(store) = lock.get(&uri) {
+                                                    let mut start =
+                                                        store.byte_offset_to_position(range.start);
+                                                    start.character += 1;
+                                                    let mut end =
+                                                        store.byte_offset_to_position(range.end);
+                                                    end.character -= 1;
+                                                    Some(Range::new(start, end))
+                                                } else {
+                                                    None
+                                                }
+                                            };
                                             let v = v
                                                 .into_iter()
                                                 .map(|v| CompletionItem {
                                                     label: v.to_string(),
                                                     detail: None,
+                                                    text_edit: range.clone().map(|range| {
+                                                        CompletionTextEdit::Edit(TextEdit::new(
+                                                            range,
+                                                            v.to_string(),
+                                                        ))
+                                                    }),
                                                     ..Default::default()
                                                 })
                                                 .collect();
@@ -378,7 +397,7 @@ impl LanguageServer for Backend {
                         3 => {
                             if let KeyOrValueOwned::Key(crate_) = &path[0] {
                                 if let KeyOrValueOwned::Key(expanded_key) = &path[1] {
-                                    if let KeyOrValueOwned::Value(Value::String { value, .. }) =
+                                    if let KeyOrValueOwned::Value(Value::String { value, range }) =
                                         &path[2]
                                     {
                                         match expanded_key.value.as_str() {
@@ -415,11 +434,36 @@ impl LanguageServer for Backend {
                                                     .get_versions(&crate_.value, value)
                                                     .await
                                                 {
+                                                    let range = {
+                                                        let lock = self.toml_store.lock().await;
+                                                        if let Some(store) = lock.get(&uri) {
+                                                            let mut start = store
+                                                                .byte_offset_to_position(
+                                                                    range.start,
+                                                                );
+                                                            start.character += 1;
+                                                            let mut end = store
+                                                                .byte_offset_to_position(range.end);
+                                                            end.character -= 1;
+                                                            Some(Range::new(start, end))
+                                                        } else {
+                                                            None
+                                                        }
+                                                    };
+
                                                     let v = v
                                                         .into_iter()
                                                         .map(|v| CompletionItem {
                                                             label: v.to_string(),
                                                             detail: None,
+                                                            text_edit: range.clone().map(|range| {
+                                                                CompletionTextEdit::Edit(
+                                                                    TextEdit::new(
+                                                                        range,
+                                                                        v.to_string(),
+                                                                    ),
+                                                                )
+                                                            }),
                                                             ..Default::default()
                                                         })
                                                         .collect();
