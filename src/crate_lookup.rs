@@ -1,13 +1,13 @@
 use std::{
+    collections::HashMap,
     fs::{read_dir, read_to_string},
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<(String, Vec<String>)>)>>>;
+type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<(String, Vec<Arc<String>>)>)>>>;
 
 use reqwest::Client;
-use taplo::HashMap;
 use tokio::{sync::RwLock, time::sleep};
 use trie_rs::map::{Trie, TrieBuilder};
 
@@ -46,7 +46,8 @@ impl CratesIoStorage {
 
 fn read_data(path: &Path) -> OfflineCratesData {
     if let Ok(dir) = read_dir(path.join("index")) {
-        let mut hm: HashMap<String, Vec<(String, Vec<(String, Vec<String>)>)>> = HashMap::new();
+        let mut hm: HashMap<String, Vec<(String, Vec<(String, Vec<Arc<String>>)>)>> =
+            HashMap::new();
         for file in dir.into_iter().filter_map(|v| v.ok()) {
             let file = file.path();
             let name = file
@@ -69,7 +70,8 @@ fn read_data(path: &Path) -> OfflineCratesData {
                 .map(|(key, value)| (normalize_key(&key), (key, value)))
             {
                 let item = hm.entry(key).or_default();
-                item.push(value);
+                let (a, b) = value;
+                item.push((a, post_process_value(b)));
             }
         }
         if hm.is_empty() {
@@ -85,6 +87,24 @@ fn read_data(path: &Path) -> OfflineCratesData {
     } else {
         None
     }
+}
+
+fn post_process_value(value: Vec<(String, Vec<String>)>) -> Vec<(String, Vec<Arc<String>>)> {
+    let mut out = vec![];
+    let mut features = HashMap::new();
+    for (version, f) in value {
+        for feature in f {
+            let added = feature.starts_with("+");
+            let feature = &feature[1..];
+            if added {
+                features.insert(feature.to_string(), Arc::new(feature.to_string()));
+            } else {
+                features.remove(feature);
+            }
+        }
+        out.push((version, features.values().cloned().collect::<Vec<_>>()))
+    }
+    out
 }
 
 pub fn shared<T>(t: T) -> Shared<T> {
@@ -128,8 +148,8 @@ impl CratesIoStorage {
                     (
                         a.to_string(),
                         None,
-                        b.first()
-                            .map(|(version, features)| version.to_string())
+                        b.last()
+                            .map(|(version, _)| version.to_string())
                             .unwrap_or_default(),
                     )
                 })
@@ -167,7 +187,7 @@ impl CratesIoStorage {
             Some(
                 versions
                     .iter()
-                    .map(|(versiom, features)| RustVersion::from(versiom.as_str()))
+                    .map(|(versiom, _)| RustVersion::from(versiom.as_str()))
                     .collect::<Vec<_>>(),
             )
         } else {
@@ -189,43 +209,77 @@ impl CratesIoStorage {
     }
 
     pub async fn get_features_local(&self, name: &str, version: &str) -> Option<Vec<String>> {
-        let version = RustVersion::from(version);
-        let v = self.versions_cache.read().await;
-        match v.get(name) {
-            Some(v) => match v {
-                InfoCacheEntry::Pending(_) => None,
-                InfoCacheEntry::Ready(v) => Some(
-                    v.iter()
-                        .find(|v| &v.version == &version)
-                        .map(|b| b.features.clone())
-                        .unwrap_or_default(),
-                ),
-            },
-            None => {
-                //INFO: thats probably fine, bc CratesIoStorage will exist until the lsp is stopped
-                let cpy = unsafe { (self as *const Self).as_ref() }.unwrap();
-                let name = name.to_string();
-                tokio::spawn(async move { cpy.versions_features(&name).await });
-                None
+        let ver = RustVersion::from(version);
+        let lock = self.data.read().await;
+        if let Some(v) = &*lock {
+            let search = v.exact_match(normalize_key(name))?;
+            let (_, versions) = search
+                .iter()
+                .find(|v| v.0.to_lowercase() == name.to_lowercase())?;
+            versions
+                .iter()
+                .find(|(version, _)| RustVersion::from(version.as_str()).eq(&ver))
+                .map(|v| v.1.iter().map(|v| v.to_string()).collect())
+        } else {
+            let v = self.versions_cache.read().await;
+            match v.get(name) {
+                Some(v) => match v {
+                    InfoCacheEntry::Pending(_) => None,
+                    InfoCacheEntry::Ready(v) => Some(
+                        v.iter()
+                            .find(|v| &v.version == &ver)
+                            .map(|b| b.features.clone())
+                            .unwrap_or_default(),
+                    ),
+                },
+                None => {
+                    //INFO: thats probably fine, bc CratesIoStorage will exist until the lsp is stopped
+                    let cpy = unsafe { (self as *const Self).as_ref() }.unwrap();
+                    let name = name.to_string();
+                    tokio::spawn(async move { cpy.versions_features(&name).await });
+                    None
+                }
             }
         }
     }
 
-    pub async fn get_features(&self, name: &str, version: &str, search: &str) -> Vec<String> {
-        let search = search.to_lowercase();
-        let temp = self.versions_features(name).await.ok();
-        temp.and_then(|v| {
-            v.into_iter()
-                .find(|v| v.matches_version(version))
-                .map(|v| v.features)
+    pub async fn get_features(
+        &self,
+        name: &str,
+        version: &str,
+        search: &str,
+    ) -> Option<Vec<String>> {
+        let search_query = search.to_lowercase();
+        let lock = self.data.read().await;
+        if let Some(v) = &*lock {
+            let search = v.exact_match(normalize_key(name))?;
+            let v = RustVersion::from(version);
+            let (_, versions) = search
+                .iter()
+                .find(|v| v.0.to_lowercase() == name.to_lowercase())?;
+            versions
+                .iter()
+                .find(|(version, _)| RustVersion::from(version.as_str()).eq(&v))
                 .map(|v| {
-                    v.into_iter()
-                        .map(|v| v.to_lowercase())
-                        .filter(|v| v.starts_with(&search))
-                        .collect::<Vec<_>>()
+                    v.1.iter()
+                        .map(|v| v.to_string())
+                        .filter(|v| v.starts_with(&search_query))
+                        .collect()
                 })
-        })
-        .unwrap_or_default()
+        } else {
+            let temp = self.versions_features(name).await.ok();
+            temp.and_then(|v| {
+                v.into_iter()
+                    .find(|v| v.matches_version(version))
+                    .map(|v| v.features)
+                    .map(|v| {
+                        v.into_iter()
+                            .map(|v| v.to_lowercase())
+                            .filter(|v| v.starts_with(&search_query))
+                            .collect::<Vec<_>>()
+                    })
+            })
+        }
     }
 
     pub async fn get_versions(&self, name: &str, version_filter: &str) -> Option<Vec<RustVersion>> {
@@ -238,8 +292,8 @@ impl CratesIoStorage {
             Some(
                 versions
                     .iter()
-                    .filter(|(version, features)| version.starts_with(version_filter))
-                    .map(|(version, features)| RustVersion::from(version.as_str()))
+                    .filter(|(version, _)| version.starts_with(version_filter))
+                    .map(|(version, _)| RustVersion::from(version.as_str()))
                     .collect::<Vec<_>>(),
             )
         } else {

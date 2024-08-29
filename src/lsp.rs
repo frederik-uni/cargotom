@@ -514,6 +514,7 @@ impl LanguageServer for Backend {
                                                             value,
                                                         )
                                                         .await
+                                                        .unwrap_or_default()
                                                         .into_iter()
                                                         .map(|v| CompletionItem {
                                                             label: v.to_string(),
