@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<String>)>>>;
+type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<(String, Vec<String>)>)>>>;
 
 use reqwest::Client;
 use taplo::HashMap;
@@ -46,7 +46,7 @@ impl CratesIoStorage {
 
 fn read_data(path: &Path) -> OfflineCratesData {
     if let Ok(dir) = read_dir(path.join("index")) {
-        let mut hm: HashMap<String, Vec<(String, Vec<String>)>> = HashMap::new();
+        let mut hm: HashMap<String, Vec<(String, Vec<(String, Vec<String>)>)>> = HashMap::new();
         for file in dir.into_iter().filter_map(|v| v.ok()) {
             let file = file.path();
             let name = file
@@ -60,7 +60,12 @@ fn read_data(path: &Path) -> OfflineCratesData {
             for (key, value) in read_to_string(file)
                 .unwrap_or_default()
                 .split('\n')
-                .filter_map(|line| serde_json::from_str::<(String, Vec<String>)>(line).ok())
+                .filter_map(|line| {
+                    serde_json::from_str::<(String, Vec<(String, Vec<String>)>)>(&format!(
+                        "[{line}]"
+                    ))
+                    .ok()
+                })
                 .map(|(key, value)| (normalize_key(&key), (key, value)))
             {
                 let item = hm.entry(key).or_default();
@@ -123,7 +128,9 @@ impl CratesIoStorage {
                     (
                         a.to_string(),
                         None,
-                        b.first().map(|v| v.to_string()).unwrap_or_default(),
+                        b.first()
+                            .map(|(version, features)| version.to_string())
+                            .unwrap_or_default(),
                     )
                 })
                 .collect::<Vec<_>>();
@@ -160,7 +167,7 @@ impl CratesIoStorage {
             Some(
                 versions
                     .iter()
-                    .map(|v| RustVersion::from(v.as_str()))
+                    .map(|(versiom, features)| RustVersion::from(versiom.as_str()))
                     .collect::<Vec<_>>(),
             )
         } else {
@@ -231,8 +238,8 @@ impl CratesIoStorage {
             Some(
                 versions
                     .iter()
-                    .filter(|v| v.starts_with(version_filter))
-                    .map(|v| RustVersion::from(v.as_str()))
+                    .filter(|(version, features)| version.starts_with(version_filter))
+                    .map(|(version, features)| RustVersion::from(version.as_str()))
                     .collect::<Vec<_>>(),
             )
         } else {

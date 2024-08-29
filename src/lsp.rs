@@ -98,6 +98,26 @@ impl Store {
         updates
     }
 
+    pub async fn invalid_versions(
+        &self,
+        crates: &Shared<CratesIoStorage>,
+    ) -> Vec<(String, RangeExclusive)> {
+        let lock = crates.read().await;
+        let mut updates = vec![];
+        for cr in self.crates_info.iter() {
+            let crate_name = &cr.key.value;
+            if let Some((version, range)) = cr.get_version() {
+                let crate_version = RustVersion::from(version.as_str());
+                if let Some(v) = lock.get_version_local(crate_name).await {
+                    if v.iter().find(|v| (*v) == &crate_version).is_none() {
+                        updates.push((crate_name.clone(), range));
+                    }
+                }
+            }
+        }
+        updates
+    }
+
     pub fn new(s: String) -> Self {
         let mut s = Self {
             tree: parse_toml(&s),
@@ -605,6 +625,28 @@ impl Backend {
                             None,
                             None,
                             format!("Unknown feature `{feature}` for crate `{name}` "),
+                            None,
+                            None,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            );
+
+            let invalid_versions = store.invalid_versions(&self.crates).await;
+            items.append(
+                &mut invalid_versions
+                    .into_iter()
+                    .map(|(name, range)| {
+                        let mut start = store.byte_offset_to_position(range.start);
+                        start.character += 1;
+                        let mut end = store.byte_offset_to_position(range.end);
+                        end.character -= 1;
+                        Diagnostic::new(
+                            Range::new(start, end),
+                            Some(DiagnosticSeverity::ERROR),
+                            None,
+                            None,
+                            format!("Unknown version for crate `{name}` "),
                             None,
                             None,
                         )
