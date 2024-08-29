@@ -49,9 +49,9 @@ impl Store {
 
     pub async fn needs_update(
         &self,
-        crates: &Arc<Mutex<CratesIoStorage>>,
+        crates: &Shared<CratesIoStorage>,
     ) -> Vec<(String, RangeExclusive, String)> {
-        let lock = crates.lock().await;
+        let lock = crates.read().await;
         let mut updates = vec![];
         for cr in self.crates_info.iter() {
             let crate_name = &cr.key.value;
@@ -141,7 +141,7 @@ impl LanguageServer for Backend {
             .map(serde_json::from_value)
             .and_then(|v| v.ok())
             .unwrap_or_default();
-        *self.crates.lock().await = CratesIoStorage::new(
+        *self.crates.write().await = CratesIoStorage::new(
             &self.path,
             config.stable.unwrap_or(true),
             config.offline.unwrap_or(true),
@@ -332,7 +332,7 @@ impl LanguageServer for Backend {
                             //todo: use  pub text_edit:
                             let crate_ = &path[0];
                             if let KeyOrValueOwned::Key(key) = crate_ {
-                                let result = self.crates.lock().await.search(&key.value).await;
+                                let result = self.crates.read().await.search(&key.value).await;
                                 let v = result
                                     .into_iter()
                                     .map(|(name, detail, version)| CompletionItem {
@@ -358,7 +358,7 @@ impl LanguageServer for Backend {
                                     KeyOrValueOwned::Value(Value::String { value, .. }) => {
                                         if let Some(v) = self
                                             .crates
-                                            .lock()
+                                            .read()
                                             .await
                                             .get_versions(&key.value, value)
                                             .await
@@ -392,7 +392,7 @@ impl LanguageServer for Backend {
                                                 {
                                                     let v = self
                                                         .crates
-                                                        .lock()
+                                                        .read()
                                                         .await
                                                         .get_features(
                                                             &crate_.value,
@@ -413,7 +413,7 @@ impl LanguageServer for Backend {
                                             "version}" => {
                                                 if let Some(v) = self
                                                     .crates
-                                                    .lock()
+                                                    .read()
                                                     .await
                                                     .get_versions(&crate_.value, value)
                                                     .await

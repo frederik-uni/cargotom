@@ -8,7 +8,10 @@ type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<String>)>>>;
 
 use reqwest::Client;
 use taplo::HashMap;
-use tokio::{sync::Mutex, time::sleep};
+use tokio::{
+    sync::{Mutex, RwLock},
+    time::sleep,
+};
 use trie_rs::map::{Trie, TrieBuilder};
 
 use crate::{
@@ -16,7 +19,7 @@ use crate::{
     git::updated_local_git,
 };
 
-pub type Shared<T> = Arc<Mutex<T>>;
+pub type Shared<T> = Arc<RwLock<T>>;
 #[derive(Clone)]
 pub struct CratesIoStorage {
     pub search_cache: Shared<HashMap<String, SearchCacheEntry>>,
@@ -83,7 +86,7 @@ fn read_data(path: &Path) -> OfflineCratesData {
 }
 
 pub fn shared<T>(t: T) -> Shared<T> {
-    Arc::new(Mutex::new(t))
+    Arc::new(RwLock::new(t))
 }
 
 impl CratesIoStorage {
@@ -109,7 +112,7 @@ impl CratesIoStorage {
     }
 
     pub async fn search(&self, query: &str) -> Vec<(String, Option<String>, String)> {
-        let lock = self.data.lock().await;
+        let lock = self.data.read().await;
         if let Some(v) = &*lock {
             let search = v
                 .predictive_search(query.to_lowercase())
@@ -151,7 +154,7 @@ impl CratesIoStorage {
     }
 
     pub async fn get_version_local(&self, name: &str) -> Option<Vec<RustVersion>> {
-        let lock = self.data.lock().await;
+        let lock = self.data.read().await;
         if let Some(v) = &*lock {
             let search = v.exact_match(normalize_key(name))?;
             let (_, versions) = search
@@ -164,7 +167,7 @@ impl CratesIoStorage {
                     .collect::<Vec<_>>(),
             )
         } else {
-            let v = self.versions_cache.lock().await;
+            let v = self.versions_cache.read().await;
             match v.get(name) {
                 Some(v) => match v {
                     InfoCacheEntry::Pending(_) => None,
@@ -200,7 +203,7 @@ impl CratesIoStorage {
     }
 
     pub async fn get_versions(&self, name: &str, version_filter: &str) -> Option<Vec<RustVersion>> {
-        let lock = self.data.lock().await;
+        let lock = self.data.read().await;
         if let Some(v) = &*lock {
             let search = v.exact_match(normalize_key(name))?;
             let (_, versions) = search
@@ -234,8 +237,8 @@ fn normalize_key(key: &str) -> String {
 pub fn update_thread(data: CratesIoStorage, path: PathBuf) {
     tokio::spawn(async move {
         let need_update = {
-            let updating = *data.updating.lock().await;
-            let last_checked = *data.last_checked.lock().await;
+            let updating = *data.updating.read().await;
+            let last_checked = *data.last_checked.read().await;
             match updating {
                 true => false,
                 false => match last_checked
@@ -255,13 +258,13 @@ pub fn update_thread(data: CratesIoStorage, path: PathBuf) {
 }
 
 async fn update(toml_data: CratesIoStorage, path: &Path) {
-    *toml_data.updating.lock().await = true;
+    *toml_data.updating.write().await = true;
 
     let update = updated_local_git(path);
     if update {
         let data = read_data(path);
-        *toml_data.data.lock().await = data;
+        *toml_data.data.write().await = data;
     }
-    *toml_data.updating.lock().await = false;
-    *toml_data.last_checked.lock().await = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    *toml_data.updating.write().await = false;
+    *toml_data.last_checked.write().await = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 }

@@ -16,7 +16,7 @@ pub enum InfoCacheEntry {
 impl CratesIoStorage {
     pub async fn search_online(&self, query: &str) -> Result<Vec<Crate>, reqwest::Error> {
         let notify = Arc::new(Notify::new());
-        let cache_lock = self.search_cache.lock().await;
+        let cache_lock = self.search_cache.read().await;
 
         if let Some(entry) = cache_lock.get(query) {
             match entry {
@@ -25,7 +25,7 @@ impl CratesIoStorage {
                     drop(cache_lock);
                     cloned_notify.notified().await;
 
-                    let cache_lock = self.search_cache.lock().await;
+                    let cache_lock = self.search_cache.read().await;
                     if let Some(SearchCacheEntry::Ready(result)) = cache_lock.get(query) {
                         return Ok(result.clone());
                     }
@@ -36,10 +36,10 @@ impl CratesIoStorage {
             }
         }
 
-        {
-            let mut cache_lock = self.search_cache.lock().await;
-            cache_lock.insert(query.to_string(), SearchCacheEntry::Pending(notify.clone()));
-        }
+        // {
+        //     let mut cache_lock = self.search_cache.lock().await;
+        //     cache_lock.insert(query.to_string(), SearchCacheEntry::Pending(notify.clone()));
+        // }
 
         let url = format!(
             "https://crates.io/api/v1/crates?page=1&per_page={}&q={}&sort=relevance",
@@ -55,7 +55,7 @@ impl CratesIoStorage {
 
         match res {
             Ok(search_response) => {
-                let mut cache_lock = self.search_cache.lock().await;
+                let mut cache_lock = self.search_cache.write().await;
                 cache_lock.insert(
                     query.to_string(),
                     SearchCacheEntry::Ready(search_response.crates.clone()),
@@ -64,7 +64,7 @@ impl CratesIoStorage {
                 Ok(search_response.crates)
             }
             Err(e) => {
-                let mut cache_lock = self.search_cache.lock().await;
+                let mut cache_lock = self.search_cache.write().await;
                 cache_lock.remove(query);
                 notify.notify_waiters();
                 Err(e)
@@ -76,17 +76,17 @@ impl CratesIoStorage {
         &self,
         name: &str,
     ) -> Result<Vec<VersionExport>, reqwest::Error> {
-        let notify = Arc::new(Notify::new());
-        let cache_lock = self.versions_cache.lock().await;
+        //let notify = Arc::new(Notify::new());
+        let cache_lock = self.versions_cache.read().await;
 
         if let Some(entry) = cache_lock.get(name) {
             match entry {
                 InfoCacheEntry::Pending(existing_notify) => {
-                    let cloned_notify = existing_notify.clone();
+                    let notify = existing_notify.clone();
                     drop(cache_lock);
-                    cloned_notify.notified().await;
+                    notify.notified().await;
 
-                    let cache_lock = self.versions_cache.lock().await;
+                    let cache_lock = self.versions_cache.read().await;
                     if let Some(InfoCacheEntry::Ready(result)) = cache_lock.get(name) {
                         return Ok(result.clone());
                     }
@@ -96,11 +96,10 @@ impl CratesIoStorage {
                 }
             }
         }
+        //let mut cache_lock = self.versions_cache.lock().await;
 
-        {
-            let mut cache_lock = self.versions_cache.lock().await;
-            cache_lock.insert(name.to_string(), InfoCacheEntry::Pending(notify.clone()));
-        }
+        //cache_lock.insert(name.to_string(), InfoCacheEntry::Pending(notify.clone()));
+        //drop(cache_lock);
 
         let url = format!("https://crates.io/api/v1/crates/{}/versions", name);
 
@@ -110,18 +109,17 @@ impl CratesIoStorage {
             Err(e) => Err(e),
         };
 
+        let mut cache_lock = self.versions_cache.write().await;
         match res {
             Ok(search_response) => {
-                let mut cache_lock = self.versions_cache.lock().await;
                 let versions = search_response.versions();
                 cache_lock.insert(name.to_string(), InfoCacheEntry::Ready(versions.clone()));
-                notify.notify_waiters();
+                //notify.notify_waiters();
                 Ok(versions)
             }
             Err(e) => {
-                let mut cache_lock = self.search_cache.lock().await;
                 cache_lock.remove(name);
-                notify.notify_waiters();
+                //notify.notify_waiters();
                 Err(e)
             }
         }
