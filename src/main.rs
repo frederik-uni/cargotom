@@ -2,7 +2,9 @@ pub mod api;
 mod crate_lookup;
 mod generate_tree;
 mod git;
+mod helper;
 pub mod lsp;
+mod rust_version;
 
 use std::path::PathBuf;
 

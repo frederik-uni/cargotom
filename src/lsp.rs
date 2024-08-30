@@ -7,11 +7,12 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::api::RustVersion;
-use crate::crate_lookup::{shared, CratesIoStorage, Shared};
+use crate::crate_lookup::{CratesIoStorage, Shared};
 use crate::generate_tree::{
     get_after_key, parse_toml, Key, KeyOrValueOwned, RangeExclusive, Tree, TreeValue, Value,
 };
+use crate::helper::{get_byte_index_from_position, new_workspace_edit, shared};
+use crate::rust_version::RustVersion;
 
 struct Backend {
     crates: Shared<CratesIoStorage>,
@@ -35,6 +36,24 @@ struct Store {
 }
 
 impl Store {
+    pub fn new(s: String) -> Self {
+        let mut s = Self {
+            tree: parse_toml(&s),
+            content: s,
+            crates_info: vec![],
+        };
+        s.crates();
+        s
+    }
+
+    pub fn inner_string_range(&self, range: &RangeExclusive) -> Range {
+        let mut start = self.byte_offset_to_position(range.start);
+        start.character += 1;
+        let mut end = self.byte_offset_to_position(range.end);
+        end.character -= 1;
+        Range::new(start, end)
+    }
+
     pub fn byte_offset_to_position(&self, byte_offset: u32) -> Position {
         let byte_offset = byte_offset as usize;
 
@@ -74,13 +93,13 @@ impl Store {
     pub async fn needs_update(
         &self,
         crates: &Shared<CratesIoStorage>,
-    ) -> Vec<(String, RangeExclusive, String)> {
+    ) -> Option<Vec<(String, RangeExclusive, String)>> {
         let lock = crates.read().await;
         let mut updates = vec![];
         for cr in self.crates_info.iter() {
             let crate_name = &cr.key.value;
             if let Some((version, range)) = cr.get_version() {
-                let crate_version = RustVersion::from(version.as_str());
+                let crate_version = RustVersion::try_from(version.as_str()).ok()?;
                 let mut versions = lock
                     .get_version_local(crate_name)
                     .await
@@ -95,19 +114,19 @@ impl Store {
                 }
             }
         }
-        updates
+        Some(updates)
     }
 
     pub async fn invalid_versions(
         &self,
         crates: &Shared<CratesIoStorage>,
-    ) -> Vec<(String, RangeExclusive)> {
+    ) -> Option<Vec<(String, RangeExclusive)>> {
         let lock = crates.read().await;
         let mut updates = vec![];
         for cr in self.crates_info.iter() {
             let crate_name = &cr.key.value;
             if let Some((version, range)) = cr.get_version() {
-                let crate_version = RustVersion::from(version.as_str());
+                let crate_version = RustVersion::try_from(version.as_str()).ok()?;
                 if let Some(v) = lock.get_version_local(crate_name).await {
                     if v.iter().find(|v| (*v) == &crate_version).is_none() {
                         updates.push((crate_name.clone(), range));
@@ -115,17 +134,7 @@ impl Store {
                 }
             }
         }
-        updates
-    }
-
-    pub fn new(s: String) -> Self {
-        let mut s = Self {
-            tree: parse_toml(&s),
-            content: s,
-            crates_info: vec![],
-        };
-        s.crates();
-        s
+        Some(updates)
     }
 
     pub fn text(&self) -> &str {
@@ -201,7 +210,14 @@ impl LanguageServer for Backend {
                     ..Default::default()
                 },
             )),
-            completion_provider: Some(CompletionOptions::default()),
+            completion_provider: Some(CompletionOptions {
+                trigger_characters: Some(vec!["\"".to_string()]),
+                ..Default::default()
+            }),
+            signature_help_provider: Some(SignatureHelpOptions {
+                trigger_characters: Some(vec!["\"".to_string()]),
+                ..Default::default()
+            }),
             ..Default::default()
         };
         Ok(InitializeResult {
@@ -241,43 +257,29 @@ impl LanguageServer for Backend {
                         true => CodeAction {
                             title: "Expand dependency specification".to_string(),
                             kind: Some(CodeActionKind::QUICKFIX),
-                            edit: Some(WorkspaceEdit {
-                                changes: Some(
-                                    vec![(
-                                        uri_.clone(),
-                                        vec![TextEdit::new(
-                                            range,
-                                            format!("{} version = \"{}\" {}", '{', version, '}'),
-                                        )],
-                                    )]
-                                    .into_iter()
-                                    .collect(),
-                                ),
-                                ..WorkspaceEdit::default()
-                            }),
+                            edit: Some(new_workspace_edit(
+                                uri_.clone(),
+                                vec![TextEdit::new(
+                                    range,
+                                    format!("{} version = \"{}\" {}", '{', version, '}'),
+                                )],
+                            )),
                             ..CodeAction::default()
                         },
                         false => CodeAction {
                             title: "Collapse dependency specification".to_string(),
                             kind: Some(CodeActionKind::QUICKFIX),
-                            edit: Some(WorkspaceEdit {
-                                changes: Some(
-                                    vec![(
-                                        uri_.clone(),
-                                        vec![TextEdit::new(range, format!("\"{}\"", version))],
-                                    )]
-                                    .into_iter()
-                                    .collect(),
-                                ),
-                                ..WorkspaceEdit::default()
-                            }),
+                            edit: Some(new_workspace_edit(
+                                uri_.clone(),
+                                vec![TextEdit::new(range, format!("\"{}\"", version))],
+                            )),
                             ..CodeAction::default()
                         },
                     };
                     actions.push(CodeActionOrCommand::CodeAction(action));
                 }
 
-                let update = store.needs_update(&self.crates).await;
+                let update = store.needs_update(&self.crates).await.unwrap_or_default();
                 let action = CodeAction {
                     title: "Open Docs".to_string(),
                     kind: Some(CodeActionKind::EMPTY),
@@ -317,12 +319,7 @@ impl LanguageServer for Backend {
                         let action = CodeAction {
                             title: "Upgrade".to_string(),
                             kind: Some(CodeActionKind::QUICKFIX),
-                            edit: Some(WorkspaceEdit {
-                                changes: Some(
-                                    vec![(uri_.clone(), vec![edit])].into_iter().collect(),
-                                ),
-                                ..WorkspaceEdit::default()
-                            }),
+                            edit: Some(new_workspace_edit(uri_.clone(), vec![edit])),
                             ..CodeAction::default()
                         };
                         actions.insert(0, CodeActionOrCommand::CodeAction(action));
@@ -341,10 +338,7 @@ impl LanguageServer for Backend {
                     let action = CodeAction {
                         title: "Upgrade All".to_string(),
                         kind: Some(CodeActionKind::QUICKFIX),
-                        edit: Some(WorkspaceEdit {
-                            changes: Some(vec![(uri_, changes)].into_iter().collect()),
-                            ..WorkspaceEdit::default()
-                        }),
+                        edit: Some(new_workspace_edit(uri_, changes)),
                         ..CodeAction::default()
                     };
                     actions.push(CodeActionOrCommand::CodeAction(action));
@@ -425,156 +419,29 @@ impl LanguageServer for Backend {
                     match path.len() {
                         1 => {
                             let crate_ = &path[0];
-                            if let KeyOrValueOwned::Key(key) = crate_ {
-                                let result = self.crates.read().await.search(&key.value).await;
-                                let v = result
-                                    .into_iter()
-                                    .map(|(name, detail, version)| CompletionItem {
-                                        label: name.clone(),
-                                        detail,
-                                        insert_text: Some(format!("{name} = \"{version}\"")),
-                                        ..Default::default()
-                                    })
-                                    .collect::<Vec<_>>();
-                                return Ok(Some(CompletionResponse::Array(v)));
-                            }
+                            let v = self.complete_1(crate_.as_key()).await.unwrap_or_default();
+                            return Ok(Some(CompletionResponse::Array(v)));
                         }
                         2 => {
                             let crate_ = &path[0];
                             let part2 = &path[1];
-
-                            if let KeyOrValueOwned::Key(key) = crate_ {
-                                match part2 {
-                                    KeyOrValueOwned::Key(_) => {
-                                        //todo: suggest version with the version string
-                                        //todo: use additional_text_edits to close }
-                                    }
-                                    KeyOrValueOwned::Value(Value::String { value, range }) => {
-                                        if let Some(v) = self
-                                            .crates
-                                            .read()
-                                            .await
-                                            .get_versions(&key.value, value)
-                                            .await
-                                        {
-                                            let range = {
-                                                let lock = self.toml_store.lock().await;
-                                                if let Some(store) = lock.get(&uri) {
-                                                    let mut start =
-                                                        store.byte_offset_to_position(range.start);
-                                                    start.character += 1;
-                                                    let mut end =
-                                                        store.byte_offset_to_position(range.end);
-                                                    end.character -= 1;
-                                                    Some(Range::new(start, end))
-                                                } else {
-                                                    None
-                                                }
-                                            };
-                                            let v = v
-                                                .into_iter()
-                                                .map(|v| CompletionItem {
-                                                    label: v.to_string(),
-                                                    detail: None,
-                                                    text_edit: range.clone().map(|range| {
-                                                        CompletionTextEdit::Edit(TextEdit::new(
-                                                            range,
-                                                            v.to_string(),
-                                                        ))
-                                                    }),
-                                                    ..Default::default()
-                                                })
-                                                .collect();
-                                            return Ok(Some(CompletionResponse::Array(v)));
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
+                            let v = self
+                                .complete_2(crate_.as_key(), part2, &uri)
+                                .await
+                                .unwrap_or_default();
+                            return Ok(Some(CompletionResponse::Array(v)));
                         }
                         3 => {
-                            if let KeyOrValueOwned::Key(crate_) = &path[0] {
-                                if let KeyOrValueOwned::Key(expanded_key) = &path[1] {
-                                    if let KeyOrValueOwned::Value(Value::String { value, range }) =
-                                        &path[2]
-                                    {
-                                        match expanded_key.value.as_str() {
-                                            "features" => {
-                                                if let Some(version) = self
-                                                    .get_version_for_features(&uri, expanded_key)
-                                                    .await
-                                                {
-                                                    let v = self
-                                                        .crates
-                                                        .read()
-                                                        .await
-                                                        .get_features(
-                                                            &crate_.value,
-                                                            &version,
-                                                            value,
-                                                        )
-                                                        .await
-                                                        .unwrap_or_default()
-                                                        .into_iter()
-                                                        .map(|v| CompletionItem {
-                                                            label: v.to_string(),
-                                                            detail: None,
-                                                            ..Default::default()
-                                                        })
-                                                        .collect();
-                                                    return Ok(Some(CompletionResponse::Array(v)));
-                                                }
-                                            }
-                                            "version" => {
-                                                if let Some(v) = self
-                                                    .crates
-                                                    .read()
-                                                    .await
-                                                    .get_versions(&crate_.value, value)
-                                                    .await
-                                                {
-                                                    let range = {
-                                                        let lock = self.toml_store.lock().await;
-                                                        if let Some(store) = lock.get(&uri) {
-                                                            let mut start = store
-                                                                .byte_offset_to_position(
-                                                                    range.start,
-                                                                );
-                                                            start.character += 1;
-                                                            let mut end = store
-                                                                .byte_offset_to_position(range.end);
-                                                            end.character -= 1;
-                                                            Some(Range::new(start, end))
-                                                        } else {
-                                                            None
-                                                        }
-                                                    };
-
-                                                    let v = v
-                                                        .into_iter()
-                                                        .map(|v| CompletionItem {
-                                                            label: v.to_string(),
-                                                            detail: None,
-                                                            text_edit: range.clone().map(|range| {
-                                                                CompletionTextEdit::Edit(
-                                                                    TextEdit::new(
-                                                                        range,
-                                                                        v.to_string(),
-                                                                    ),
-                                                                )
-                                                            }),
-                                                            ..Default::default()
-                                                        })
-                                                        .collect();
-                                                    return Ok(Some(CompletionResponse::Array(v)));
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                }
-                                //search, features, version
-                            }
+                            let v = self
+                                .complete_3(
+                                    path[0].as_key(),
+                                    path[1].as_key(),
+                                    path[2].as_value(),
+                                    &uri,
+                                )
+                                .await
+                                .unwrap_or_default();
+                            return Ok(Some(CompletionResponse::Array(v)));
                         }
                         _ => {
                             self.client
@@ -590,10 +457,190 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
+    async fn complete_1(&self, crate_name: Option<&Key>) -> Option<Vec<CompletionItem>> {
+        let crate_name = crate_name?;
+        let result = self.crates.read().await.search(&crate_name.value).await;
+        Some(
+            result
+                .into_iter()
+                .map(|(name, detail, version)| CompletionItem {
+                    label: name.clone(),
+                    detail,
+                    insert_text: Some(format!("{name} = \"{version}\"")),
+                    ..Default::default()
+                })
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    async fn complete_2(
+        &self,
+        crate_name: Option<&Key>,
+        part2: &KeyOrValueOwned,
+        uri: &str,
+    ) -> Option<Vec<CompletionItem>> {
+        let crate_name = crate_name?;
+        match part2 {
+            KeyOrValueOwned::Key(key) => {
+                let (data, range, is_missing) = {
+                    let lock = self.toml_store.lock().await;
+                    let toml = lock.get(uri)?;
+                    let cr =
+                        toml.find_crate_by_byte_offset_range(key.range.start, key.range.end)?;
+                    let v = cr.value.as_tree()?;
+                    let (a, range) = match key.value.is_empty() {
+                        true => {
+                            if v.0.len() == 1 {
+                                if let Some(f) = v.0.first() {
+                                    if matches!(f.value, Value::NoContent) {
+                                        Some((f.key.value.to_string(), f.key.range))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        false => v
+                            .get(&key.value)
+                            .and_then(|v| v.as_str_value().map(|b| (b.0.to_string(), *b.1))),
+                    }?;
+                    let content = &toml.content[range.end as usize..];
+                    let nl = content.find("\n");
+                    let close = content.find("}");
+                    let is_missing = match (nl, close) {
+                        (None, None) => true,
+                        (None, Some(_)) => false,
+                        (Some(_), None) => true,
+                        (Some(a), Some(b)) => b > a,
+                    };
+                    let range = Range::new(
+                        toml.byte_offset_to_position(range.start),
+                        toml.byte_offset_to_position(range.end),
+                    );
+                    (a, range, is_missing)
+                };
+
+                match key.value.is_empty() || "version".starts_with(&key.value) {
+                    true => Some(vec![CompletionItem {
+                        label: "version...".to_string(),
+                        detail: None,
+                        text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
+                            range,
+                            format!(
+                                "version = {}{}",
+                                match key.value.is_empty() {
+                                    true => data.as_str(),
+                                    false => data.strip_prefix(&key.value).unwrap_or(data.as_str()),
+                                },
+                                match is_missing {
+                                    true => "}",
+                                    false => "",
+                                }
+                            ),
+                        ))),
+                        ..Default::default()
+                    }]),
+                    false => None,
+                }
+            }
+            KeyOrValueOwned::Value(Value::String { value, range }) => {
+                let versions = self
+                    .crates
+                    .read()
+                    .await
+                    .get_versions(&crate_name.value, value)
+                    .await?;
+                let range = {
+                    let lock = self.toml_store.lock().await;
+                    lock.get(uri).map(|v| v.inner_string_range(range))
+                };
+                Some(
+                    versions
+                        .into_iter()
+                        .map(|v| CompletionItem {
+                            label: v.to_string(),
+                            detail: None,
+                            text_edit: range.clone().map(|range| {
+                                CompletionTextEdit::Edit(TextEdit::new(range, v.to_string()))
+                            }),
+                            ..Default::default()
+                        })
+                        .collect(),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    async fn complete_3(
+        &self,
+        crate_name: Option<&Key>,
+        expanded_key: Option<&Key>,
+        data: Option<&Value>,
+        uri: &str,
+    ) -> Option<Vec<CompletionItem>> {
+        let crate_name = crate_name?;
+        let expanded_key = expanded_key?;
+        let (value, range) = data?.as_str_value()?;
+        match expanded_key.value.as_str() {
+            "features" => {
+                let version = self.get_version_for_features(&uri, expanded_key).await?;
+                let v = self
+                    .crates
+                    .read()
+                    .await
+                    .get_features(&crate_name.value, &version, value)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|v| CompletionItem {
+                        label: v.to_string(),
+                        detail: None,
+                        ..Default::default()
+                    })
+                    .collect();
+                Some(v)
+            }
+            "version" => {
+                let versions = self
+                    .crates
+                    .read()
+                    .await
+                    .get_versions(&crate_name.value, value)
+                    .await?;
+
+                let range = {
+                    let lock = self.toml_store.lock().await;
+                    lock.get(uri).map(|v| v.inner_string_range(range))
+                };
+
+                Some(
+                    versions
+                        .into_iter()
+                        .map(|v| CompletionItem {
+                            label: v.to_string(),
+                            detail: None,
+                            text_edit: range.clone().map(|range| {
+                                CompletionTextEdit::Edit(TextEdit::new(range, v.to_string()))
+                            }),
+                            ..Default::default()
+                        })
+                        .collect(),
+                )
+            }
+            _ => None,
+        }
+    }
+
     async fn analyze(&self, uri: &str) -> Vec<Diagnostic> {
         if let Some(store) = self.toml_store.lock().await.get(uri) {
             let updates = store.needs_update(&self.crates).await;
             let mut items = updates
+                .unwrap_or_default()
                 .into_iter()
                 .map(|(name, range, new)| {
                     let mut start = store.byte_offset_to_position(range.start);
@@ -636,6 +683,7 @@ impl Backend {
             let invalid_versions = store.invalid_versions(&self.crates).await;
             items.append(
                 &mut invalid_versions
+                    .unwrap_or_default()
                     .into_iter()
                     .map(|(name, range)| {
                         let mut start = store.byte_offset_to_position(range.start);
@@ -658,6 +706,7 @@ impl Backend {
         }
         vec![]
     }
+
     async fn get_version_for_features(&self, uri: &str, expanded_key: &Key) -> Option<String> {
         let lock = self.toml_store.lock().await;
         let data = lock.get(uri)?;
@@ -665,43 +714,6 @@ impl Backend {
         let version = tree.get("version")?.as_str()?;
         Some(version)
     }
-}
-
-pub fn get_byte_index_from_position(s: &str, position: Position) -> usize {
-    let line_start = index_of_first_char_in_line(s, position.line).unwrap_or(s.len());
-
-    let char_index = line_start + position.character as usize;
-
-    if char_index >= s.len() {
-        s.char_indices().nth(s.len() - 1).unwrap().0
-    } else {
-        s.char_indices().nth(char_index).unwrap().0
-    }
-}
-
-fn index_of_first_char_in_line(s: &str, line: u32) -> Option<usize> {
-    let mut current_line = 0;
-    let mut index = 0;
-
-    if line == 0 {
-        return Some(0);
-    }
-
-    for (i, c) in s.char_indices() {
-        if c == '\n' {
-            current_line += 1;
-            if current_line == line {
-                return Some(i + 1);
-            }
-        }
-        index = i;
-    }
-
-    if current_line == line - 1 {
-        return Some(index + 1);
-    }
-
-    None
 }
 
 pub async fn main(path: PathBuf) {

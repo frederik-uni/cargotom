@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
 type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<(String, Vec<Arc<String>>)>)>>>;
 
 use reqwest::Client;
@@ -12,8 +13,10 @@ use tokio::{sync::RwLock, time::sleep};
 use trie_rs::map::{Trie, TrieBuilder};
 
 use crate::{
-    api::{InfoCacheEntry, RustVersion, SearchCacheEntry},
+    api::{InfoCacheEntry, SearchCacheEntry},
     git::updated_local_git,
+    helper::shared,
+    rust_version::RustVersion,
 };
 
 pub type Shared<T> = Arc<RwLock<T>>;
@@ -107,10 +110,6 @@ fn post_process_value(value: Vec<(String, Vec<String>)>) -> Vec<(String, Vec<Arc
     out
 }
 
-pub fn shared<T>(t: T) -> Shared<T> {
-    Arc::new(RwLock::new(t))
-}
-
 impl CratesIoStorage {
     pub fn new(path: &Path, stable: bool, offline: bool, per_page_online: u32) -> Self {
         let data = shared(match offline {
@@ -187,7 +186,7 @@ impl CratesIoStorage {
             Some(
                 versions
                     .iter()
-                    .map(|(versiom, _)| RustVersion::from(versiom.as_str()))
+                    .map(|(version, _)| RustVersion::try_from(version.as_str()).unwrap())
                     .collect::<Vec<_>>(),
             )
         } else {
@@ -209,7 +208,7 @@ impl CratesIoStorage {
     }
 
     pub async fn get_features_local(&self, name: &str, version: &str) -> Option<Vec<String>> {
-        let ver = RustVersion::from(version);
+        let ver = RustVersion::try_from(version).ok()?;
         let lock = self.data.read().await;
         if let Some(v) = &*lock {
             let search = v.exact_match(normalize_key(name))?;
@@ -218,7 +217,7 @@ impl CratesIoStorage {
                 .find(|v| v.0.to_lowercase() == name.to_lowercase())?;
             versions
                 .iter()
-                .find(|(version, _)| RustVersion::from(version.as_str()).eq(&ver))
+                .find(|(version, _)| RustVersion::try_from(version.as_str()).unwrap().eq(&ver))
                 .map(|v| v.1.iter().map(|v| v.to_string()).collect())
         } else {
             let v = self.versions_cache.read().await;
@@ -253,13 +252,13 @@ impl CratesIoStorage {
         let lock = self.data.read().await;
         if let Some(v) = &*lock {
             let search = v.exact_match(normalize_key(name))?;
-            let v = RustVersion::from(version);
+            let v = RustVersion::try_from(version).ok()?;
             let (_, versions) = search
                 .iter()
                 .find(|v| v.0.to_lowercase() == name.to_lowercase())?;
             versions
                 .iter()
-                .find(|(version, _)| RustVersion::from(version.as_str()).eq(&v))
+                .find(|(version, _)| RustVersion::try_from(version.as_str()).unwrap().eq(&v))
                 .map(|v| {
                     v.1.iter()
                         .map(|v| v.to_string())
@@ -293,7 +292,7 @@ impl CratesIoStorage {
                 versions
                     .iter()
                     .filter(|(version, _)| version.starts_with(version_filter))
-                    .map(|(version, _)| RustVersion::from(version.as_str()))
+                    .map(|(version, _)| RustVersion::try_from(version.as_str()).unwrap())
                     .collect::<Vec<_>>(),
             )
         } else {
