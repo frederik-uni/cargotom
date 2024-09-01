@@ -9,6 +9,10 @@ use taplo::{
 pub(crate) struct Tree(pub Vec<TreeValue>);
 
 impl Tree {
+    pub fn by_array_child(&self, child: &Value) -> Option<&Value> {
+        self.0.iter().find_map(|v| v.value.by_array_child(child))
+    }
+
     pub fn by_key(&self, key: &Key) -> Option<&Tree> {
         match self.0.iter().find(|v| &v.key == key) {
             Some(_) => Some(self),
@@ -215,6 +219,17 @@ impl Value {
         }
     }
 
+    fn by_array_child(&self, child: &Value) -> Option<&Value> {
+        match self {
+            Value::Tree { value, .. } => value.by_array_child(child),
+            Value::Array(arr) => match arr.iter().find(|v| v == &child).is_some() {
+                true => return Some(&self),
+                false => arr.iter().find_map(|v| v.by_array_child(child)),
+            },
+            _ => None,
+        }
+    }
+
     fn find(&self, str: &str) -> Vec<&TreeValue> {
         match self {
             Value::Tree { value, .. } => value.find(str),
@@ -389,6 +404,12 @@ pub enum KeyOrValue<'a> {
 }
 
 impl<'a> KeyOrValue<'a> {
+    pub fn as_str(&self) -> Option<String> {
+        match self {
+            KeyOrValue::Key(k) => Some(k.value.clone()),
+            KeyOrValue::Value(v) => v.as_str(),
+        }
+    }
     pub fn owned(&self) -> KeyOrValueOwned {
         match self {
             KeyOrValue::Key(v) => KeyOrValueOwned::Key((*v).clone()),

@@ -533,14 +533,31 @@ impl LanguageServer for Backend {
                     };
                 } else if let Some(path) = get_after_key("features", &info) {
                     if path.len() == 2 {
-                        if let KeyOrValue::Value(v) = path[1] {
-                            if let Some(v) = v.as_str() {
-                                if let Some(query) = v.strip_prefix("dep:") {
+                        if let KeyOrValue::Value(val) = path[1] {
+                            if let Some(query) = val.as_str() {
+                                let mut existing = store
+                                    .tree
+                                    .by_array_child(*val)
+                                    .and_then(|v| v.as_array())
+                                    .and_then(|v| {
+                                        Some(
+                                            v.into_iter()
+                                                .flat_map(|v| v.as_str())
+                                                .collect::<Vec<_>>(),
+                                        )
+                                    })
+                                    .unwrap_or_default();
+                                if let Some(query) = query.strip_prefix("dep:") {
+                                    let existing: Vec<_> = existing
+                                        .iter()
+                                        .filter_map(|v| v.strip_prefix("dep:"))
+                                        .collect();
                                     let v = store
                                         .crates_info
                                         .iter()
                                         .map(|v| &v.key.value)
                                         .filter(|v| v.as_str().starts_with(query))
+                                        .filter(|v| !existing.contains(&v.as_str()))
                                         .map(|v| CompletionItem {
                                             label: v.to_string(),
                                             ..Default::default()
@@ -548,10 +565,14 @@ impl LanguageServer for Backend {
                                         .collect::<Vec<_>>();
                                     return Ok(Some(CompletionResponse::Array(v)));
                                 } else {
+                                    if let Some(v) = path[0].as_str() {
+                                        existing.push(v);
+                                    }
                                     let v = store
                                         .features
                                         .keys()
-                                        .filter(|v| v.as_str().starts_with(v.as_str()))
+                                        .filter(|v| v.as_str().starts_with(query.as_str()))
+                                        .filter(|v| !existing.contains(v))
                                         .map(|v| CompletionItem {
                                             label: v.to_string(),
                                             ..Default::default()
@@ -592,11 +613,21 @@ impl Backend {
     }
     async fn complete_1(&self, crate_name: Option<&Key>, uri: &str) -> Option<Vec<CompletionItem>> {
         let crate_name = crate_name?;
+        let existing_crates = {
+            let lock = self.toml_store.lock().await;
+            if let Some(v) = lock.get(uri) {
+                v.crates_info.iter().map(|v| v.key.value.clone()).collect()
+            } else {
+                vec![]
+            }
+        };
+
         let root_dep = self.get_root_dependencies(uri).await.unwrap_or_default();
         let result = self.crates.read().await.search(&crate_name.value).await;
         Some(
             result
                 .into_iter()
+                .filter(|(crate_name, _, _)| !existing_crates.contains(crate_name))
                 .map(|(name, detail, version)| CompletionItem {
                     label: name.clone(),
                     detail,
@@ -728,7 +759,17 @@ impl Backend {
     ) -> Option<Vec<CompletionItem>> {
         let crate_name = crate_name?;
         let expanded_key = expanded_key?;
-        let (value, range) = data?.as_str_value()?;
+        let data = data?;
+        let (value, range) = data.as_str_value()?;
+        let lock = self.toml_store.lock().await;
+        let others = lock
+            .get(uri)?
+            .tree
+            .by_array_child(data)
+            .and_then(|v| v.as_array())
+            .and_then(|v| Some(v.into_iter().flat_map(|v| v.as_str()).collect::<Vec<_>>()))
+            .unwrap_or_default();
+        drop(lock);
         match expanded_key.value.as_str() {
             "features" => {
                 let version = self.get_version_for_features(&uri, expanded_key).await?;
@@ -740,6 +781,7 @@ impl Backend {
                     .await
                     .unwrap_or_default()
                     .into_iter()
+                    .filter(|v| !others.contains(v))
                     .map(|v| CompletionItem {
                         label: v.to_string(),
                         detail: None,

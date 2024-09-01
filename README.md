@@ -33,3 +33,4 @@
   - code action make optional if not & diagnostics if not
   - diagnostics if version is set & dep in workspace
   - diagnostics when workspace modules have dep overlap
+  - diagnostics when feature duplicate
