@@ -10,7 +10,8 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::crate_lookup::{CratesIoStorage, Shared};
 use crate::generate_tree::{
-    get_after_key, parse_toml, Key, KeyOrValueOwned, RangeExclusive, Tree, TreeValue, Value,
+    get_after_key, parse_toml, Key, KeyOrValue, KeyOrValueOwned, RangeExclusive, Tree, TreeValue,
+    Value,
 };
 use crate::helper::{get_byte_index_from_position, new_workspace_edit, shared};
 use crate::rust_version::RustVersion;
@@ -37,6 +38,7 @@ struct Store {
     content: String,
     tree: Tree,
     crates_info: Vec<TreeValue>,
+    features: HashMap<String, Vec<String>>,
 }
 
 impl Store {
@@ -47,6 +49,7 @@ impl Store {
             crates_info: vec![],
             workspace_root,
             workspace_members: vec![],
+            features: Default::default(),
         };
         s.crates().await;
         s
@@ -164,6 +167,23 @@ impl Store {
             .cloned()
             .collect::<Vec<_>>();
         self.crates_info = v;
+        let v = self
+            .tree
+            .find("features")
+            .iter()
+            .filter_map(|v| v.value.as_tree())
+            .flat_map(|v| &v.0)
+            .flat_map(|v| {
+                v.value.as_array().map(|a| {
+                    (
+                        v.key.value.clone(),
+                        a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>(),
+                    )
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        self.features = v;
+
         let root = &*self.workspace_root.read().await;
         if let Some(root) = root {
             let ws: Vec<_> = self
@@ -251,7 +271,7 @@ impl LanguageServer for Backend {
                 },
             )),
             completion_provider: Some(CompletionOptions {
-                trigger_characters: Some(vec!["\"".to_string(), ".".to_string()]),
+                trigger_characters: Some(vec!["\"".to_string(), ".".to_string(), ":".to_string()]),
                 ..Default::default()
             }),
             signature_help_provider: Some(SignatureHelpOptions {
@@ -464,12 +484,12 @@ impl LanguageServer for Backend {
             return Ok(Some(CompletionResponse::Array(vec![])));
         }
         let lock = self.toml_store.lock().await;
-        if let Some(v) = lock.get(&uri) {
+        if let Some(store) = lock.get(&uri) {
             let byte_offset =
-                get_byte_index_from_position(v.text(), params.text_document_position.position)
+                get_byte_index_from_position(store.text(), params.text_document_position.position)
                     as u32;
 
-            if let Some(info) = v.tree.get_item_by_pos(byte_offset) {
+            if let Some(info) = store.tree.get_item_by_pos(byte_offset) {
                 if let Some(path) = get_after_key("dependencies", &info)
                     .or(get_after_key("dev-dependencies", &info))
                 {
@@ -511,6 +531,37 @@ impl LanguageServer for Backend {
                                 .await
                         }
                     };
+                } else if let Some(path) = get_after_key("features", &info) {
+                    if path.len() == 2 {
+                        if let KeyOrValue::Value(v) = path[1] {
+                            if let Some(v) = v.as_str() {
+                                if let Some(query) = v.strip_prefix("dep:") {
+                                    let v = store
+                                        .crates_info
+                                        .iter()
+                                        .map(|v| &v.key.value)
+                                        .filter(|v| v.as_str().starts_with(query))
+                                        .map(|v| CompletionItem {
+                                            label: v.to_string(),
+                                            ..Default::default()
+                                        })
+                                        .collect::<Vec<_>>();
+                                    return Ok(Some(CompletionResponse::Array(v)));
+                                } else {
+                                    let v = store
+                                        .features
+                                        .keys()
+                                        .filter(|v| v.as_str().starts_with(v.as_str()))
+                                        .map(|v| CompletionItem {
+                                            label: v.to_string(),
+                                            ..Default::default()
+                                        })
+                                        .collect();
+                                    return Ok(Some(CompletionResponse::Array(v)));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
