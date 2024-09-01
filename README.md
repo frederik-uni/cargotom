@@ -14,6 +14,8 @@
 #### Dependencies
 - crate names(online/offline)
 - crate versions(online/offline)
+  - latest version
+  - workspace = true if in workspace
 - crate features(online/offline)
 - feature key when version after the key `crate = "0.1.0"` => `crate = {ve"0.1.0"` to `crate = { version = "0.1.0" }`
 
@@ -21,3 +23,11 @@
 - check if crate needs update
 - check if crate version exists
 - check if crate features exist
+
+## Plans
+- features
+  - suggest features in default
+  - suggest dep:crate-name
+  - code action make optional if not & diagnostics if not
+  - diagnostics if version is set & dep in workspace
+  - diagnostics when workspace modules have dep overlap

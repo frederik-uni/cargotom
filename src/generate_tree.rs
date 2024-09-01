@@ -185,6 +185,12 @@ pub(crate) enum Value {
 }
 
 impl Value {
+    pub fn as_array(&self) -> Option<Vec<Value>> {
+        match self {
+            Value::Array(items) => Some(items.clone()),
+            _ => None,
+        }
+    }
     pub fn as_str(&self) -> Option<String> {
         match self {
             Value::String { value, .. } => Some(value.to_string()),

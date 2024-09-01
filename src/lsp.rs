@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -17,6 +18,7 @@ use crate::rust_version::RustVersion;
 struct Backend {
     crates: Shared<CratesIoStorage>,
     client: Client,
+    workspace_root: Shared<Option<PathBuf>>,
     path: PathBuf,
     toml_store: Arc<Mutex<HashMap<String, Store>>>,
 }
@@ -30,19 +32,23 @@ struct Config {
 
 #[derive(Debug)]
 struct Store {
+    workspace_root: Shared<Option<PathBuf>>,
+    workspace_members: Vec<PathBuf>,
     content: String,
     tree: Tree,
     crates_info: Vec<TreeValue>,
 }
 
 impl Store {
-    pub fn new(s: String) -> Self {
+    pub async fn new(s: String, workspace_root: Shared<Option<PathBuf>>) -> Self {
         let mut s = Self {
             tree: parse_toml(&s),
             content: s,
             crates_info: vec![],
+            workspace_root,
+            workspace_members: vec![],
         };
-        s.crates();
+        s.crates().await;
         s
     }
 
@@ -141,7 +147,7 @@ impl Store {
         &self.content
     }
 
-    fn crates(&mut self) {
+    async fn crates(&mut self) {
         let mut v = self.tree.find("dependencies");
         v.append(&mut self.tree.find("dev-dependencies"));
         let v = v
@@ -158,6 +164,28 @@ impl Store {
             .cloned()
             .collect::<Vec<_>>();
         self.crates_info = v;
+        let root = &*self.workspace_root.read().await;
+        if let Some(root) = root {
+            let ws: Vec<_> = self
+                .tree
+                .find("workspace")
+                .iter()
+                .filter_map(|v| v.value.as_tree())
+                .flat_map(|v| &v.0)
+                .filter(|v| v.key.value.as_str() == "members")
+                .filter_map(|v| v.value.as_array())
+                .flat_map(|v| v.into_iter().filter_map(|v| v.as_str()))
+                .map(|v| root.join(v))
+                .collect();
+            self.workspace_members = ws;
+        }
+    }
+
+    fn get_members(&self) -> Vec<Url> {
+        self.workspace_members
+            .iter()
+            .filter_map(|path| Url::from_file_path(path).ok())
+            .collect()
     }
 
     fn find_crate_by_byte_offset_range(
@@ -170,7 +198,7 @@ impl Store {
             .find(|v| v.is_in_range(byte_offset_start, byte_offset_end))
     }
 
-    pub fn update(&mut self, params: DidChangeTextDocumentParams) {
+    pub async fn update(&mut self, params: DidChangeTextDocumentParams) {
         for change in params.content_changes {
             if let Some(range) = change.range {
                 let start = get_byte_index_from_position(&self.content, range.start);
@@ -183,7 +211,7 @@ impl Store {
         }
         //TODO: dont parse whole toml every time
         self.tree = parse_toml(&self.content);
-        self.crates();
+        self.crates().await;
     }
 }
 
@@ -201,6 +229,18 @@ impl LanguageServer for Backend {
             config.offline.unwrap_or(true),
             config.per_page_web.unwrap_or(25),
         );
+        if let Some(root_uri) = params.root_uri {
+            let path = root_uri.to_file_path().unwrap();
+            let file = path.join("Cargo.toml");
+
+            *self.workspace_root.write().await = Some(path);
+            if let (Ok(text), Ok(uri)) = (read_to_string(&file), Url::from_file_path(file)) {
+                let store = Store::new(text, self.workspace_root.clone()).await;
+                let members = store.get_members();
+                let _ = self.toml_store.lock().await.insert(uri.to_string(), store);
+                self.make_sure_open(members).await;
+            }
+        }
         let capabilities = ServerCapabilities {
             code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
             text_document_sync: Some(TextDocumentSyncCapability::Options(
@@ -211,7 +251,7 @@ impl LanguageServer for Backend {
                 },
             )),
             completion_provider: Some(CompletionOptions {
-                trigger_characters: Some(vec!["\"".to_string()]),
+                trigger_characters: Some(vec!["\"".to_string(), ".".to_string()]),
                 ..Default::default()
             }),
             signature_help_provider: Some(SignatureHelpOptions {
@@ -383,28 +423,31 @@ impl LanguageServer for Backend {
         if !uri.ends_with("/Cargo.toml") {
             return;
         }
-        if let Some(v) = self.toml_store.lock().await.get_mut(&uri) {
-            v.update(params);
-        }
+        let members = if let Some(v) = self.toml_store.lock().await.get_mut(&uri) {
+            v.update(params).await;
+            v.get_members()
+        } else {
+            vec![]
+        };
+        self.make_sure_open(members).await;
         let diagnostics = self.analyze(&uri).await;
         self.client
             .publish_diagnostics(uri_, diagnostics, None)
             .await;
     }
 
-    async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let uri = params.text_document.uri.to_string();
-        self.toml_store.lock().await.remove(&uri);
+    async fn did_close(&self, _: DidCloseTextDocumentParams) {
+        // let uri = params.text_document.uri.to_string();
+        // self.toml_store.lock().await.remove(&uri);
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let text = params.text_document.text;
         let uri = params.text_document.uri.to_string();
-        let _ = self
-            .toml_store
-            .lock()
-            .await
-            .insert(uri.clone(), Store::new(text));
+        let store = Store::new(text, self.workspace_root.clone()).await;
+        let members = store.get_members();
+        let _ = self.toml_store.lock().await.insert(uri.clone(), store);
+        self.make_sure_open(members).await;
         let diagnostics = self.analyze(&uri).await;
         self.client
             .publish_diagnostics(params.text_document.uri, diagnostics, None)
@@ -435,7 +478,10 @@ impl LanguageServer for Backend {
                     match path.len() {
                         1 => {
                             let crate_ = &path[0];
-                            let v = self.complete_1(crate_.as_key()).await.unwrap_or_default();
+                            let v = self
+                                .complete_1(crate_.as_key(), &uri)
+                                .await
+                                .unwrap_or_default();
                             return Ok(Some(CompletionResponse::Array(v)));
                         }
                         2 => {
@@ -473,8 +519,29 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
-    async fn complete_1(&self, crate_name: Option<&Key>) -> Option<Vec<CompletionItem>> {
+    async fn get_root_dependencies(&self, uri2: &str) -> Option<Vec<String>> {
+        if let Some(root) = &*self.workspace_root.read().await {
+            let root = root.join("Cargo.toml");
+            let uri = Url::from_file_path(root).unwrap().to_string();
+            if uri == uri2 {
+                return None;
+            }
+            let lock = self.toml_store.lock().await;
+            let store = lock.get(&uri)?;
+            Some(
+                store
+                    .crates_info
+                    .iter()
+                    .map(|v| v.key.value.clone())
+                    .collect(),
+            )
+        } else {
+            None
+        }
+    }
+    async fn complete_1(&self, crate_name: Option<&Key>, uri: &str) -> Option<Vec<CompletionItem>> {
         let crate_name = crate_name?;
+        let root_dep = self.get_root_dependencies(uri).await.unwrap_or_default();
         let result = self.crates.read().await.search(&crate_name.value).await;
         Some(
             result
@@ -482,8 +549,17 @@ impl Backend {
                 .map(|(name, detail, version)| CompletionItem {
                     label: name.clone(),
                     detail,
-                    insert_text: Some(format!("{name} = \"{version}\"")),
+                    insert_text: Some(match root_dep.contains(&name) {
+                        true => format!("{name} = {} workspace = true {}", '{', '}'),
+                        false => format!("{name} = \"{version}\""),
+                    }),
                     ..Default::default()
+                })
+                .rev()
+                .enumerate()
+                .map(|(index, mut item)| {
+                    item.sort_text = Some(format!("{:04}", index));
+                    item
                 })
                 .collect::<Vec<_>>(),
         )
@@ -645,6 +721,12 @@ impl Backend {
                             }),
                             ..Default::default()
                         })
+                        .rev()
+                        .enumerate()
+                        .map(|(index, mut item)| {
+                            item.sort_text = Some(format!("{:04}", index));
+                            item
+                        })
                         .collect(),
                 )
             }
@@ -730,6 +812,24 @@ impl Backend {
         let version = tree.get("version")?.as_str()?;
         Some(version)
     }
+
+    async fn make_sure_open(&self, uris: Vec<Url>) {
+        if uris.is_empty() {
+            return;
+        }
+        for uri in uris {
+            let mut lock = self.toml_store.lock().await;
+            let uri_ = uri.to_string();
+            if lock.get(&uri_).is_none() {
+                if let Ok(path) = uri.to_file_path() {
+                    if let Ok(text) = read_to_string(path) {
+                        let store = Store::new(text, self.workspace_root.clone()).await;
+                        lock.insert(uri_, store);
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub async fn main(path: PathBuf) {
@@ -741,6 +841,7 @@ pub async fn main(path: PathBuf) {
         toml_store: Default::default(),
         crates: shared(CratesIoStorage::dummy()),
         path,
+        workspace_root: shared(None),
     })
     .finish();
 
