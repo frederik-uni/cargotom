@@ -278,6 +278,10 @@ impl LanguageServer for Backend {
                 trigger_characters: Some(vec!["\"".to_string()]),
                 ..Default::default()
             }),
+            execute_command_provider: Some(tower_lsp::lsp_types::ExecuteCommandOptions {
+                commands: vec!["open_url".to_string()],
+                ..Default::default()
+            }),
             ..Default::default()
         };
         Ok(InitializeResult {
@@ -435,6 +439,35 @@ impl LanguageServer for Backend {
         }
 
         Ok(Some(actions))
+    }
+
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<serde_json::Value>> {
+        if params.command == "open_url" {
+            let mut args = params.arguments.iter();
+            if let Some(url) = args.next().and_then(|arg| arg.as_str()) {
+                if let Err(e) = webbrowser::open(url) {
+                    self.client
+                        .show_message(
+                            MessageType::WARNING,
+                            format!("failed to open browser {}", e.to_string()),
+                        )
+                        .await;
+                    return Err(tower_lsp::jsonrpc::Error::invalid_params(
+                        "failed to open browser",
+                    ));
+                }
+            } else {
+                return Err(tower_lsp::jsonrpc::Error::invalid_params(
+                    "URL argument missing",
+                ));
+            }
+        } else {
+            return Err(tower_lsp::jsonrpc::Error::method_not_found());
+        }
+        Ok(None)
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {

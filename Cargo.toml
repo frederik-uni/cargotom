@@ -1,6 +1,6 @@
 [package]
 name = "cargotom"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 
 [dependencies]
@@ -14,4 +14,5 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1.39.3", features = ["rt-multi-thread", "macros"]}
 reqwest = {version = "0.12.7", features = ["json"]}
 urlencoding = "2.1.3"
+webbrowser = "1.0.1"
 # tame-index = {version = "0.13.2", features = ["sparse"]}

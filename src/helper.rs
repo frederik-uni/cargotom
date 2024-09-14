@@ -17,6 +17,9 @@ pub fn shared<T>(t: T) -> Shared<T> {
 }
 
 pub fn get_byte_index_from_position(s: &str, position: Position) -> usize {
+    if s.is_empty() {
+        return 0;
+    }
     let line_start = index_of_first_char_in_line(s, position.line).unwrap_or(s.len());
 
     let char_index = line_start + position.character as usize;
