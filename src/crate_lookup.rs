@@ -136,7 +136,7 @@ impl CratesIoStorage {
         let lock = self.data.read().await;
         if let Some(v) = &*lock {
             let search = v
-                .predictive_search(query.to_lowercase())
+                .predictive_search(query.to_lowercase().replace("-", "").replace("_", ""))
                 .map(|(_, a): (String, &Vec<_>)| a)
                 .collect::<Vec<_>>()
                 .clone();
