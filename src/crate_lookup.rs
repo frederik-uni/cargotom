@@ -27,7 +27,7 @@ pub struct CratesIoStorage {
     last_checked: Shared<Duration>,
     updating: Shared<bool>,
     pub client: Client,
-    stable: bool,
+    pub stable: bool,
     pub per_page: u32,
     pub data: Shared<OfflineCratesData>,
 }
@@ -147,9 +147,23 @@ impl CratesIoStorage {
                     (
                         a.to_string(),
                         None,
-                        b.last()
-                            .map(|(version, _)| version.to_string())
-                            .unwrap_or_default(),
+                        match self.stable {
+                            true => b
+                                .iter()
+                                .rev()
+                                .find(|(version, _)| {
+                                    match RustVersion::try_from(version.as_str()) {
+                                        Ok(v) => v.is_patch_int(),
+                                        Err(_) => false,
+                                    }
+                                })
+                                .map(|(version, _)| version.to_string())
+                                .unwrap_or_default(),
+                            false => b
+                                .last()
+                                .map(|(version, _)| version.to_string())
+                                .unwrap_or_default(),
+                        },
                     )
                 })
                 .collect::<Vec<_>>();
@@ -187,6 +201,7 @@ impl CratesIoStorage {
                 versions
                     .iter()
                     .map(|(version, _)| RustVersion::try_from(version.as_str()).unwrap())
+                    .filter(|v| !self.stable || v.is_patch_int())
                     .collect::<Vec<_>>(),
             )
         } else {
@@ -194,7 +209,12 @@ impl CratesIoStorage {
             match v.get(name) {
                 Some(v) => match v {
                     InfoCacheEntry::Pending(_) => None,
-                    InfoCacheEntry::Ready(v) => Some(v.iter().map(|v| v.version.clone()).collect()),
+                    InfoCacheEntry::Ready(v) => Some(
+                        v.iter()
+                            .map(|v| v.version.clone())
+                            .filter(|v| !self.stable || v.is_patch_int())
+                            .collect(),
+                    ),
                 },
                 None => {
                     //INFO: thats probably fine, bc CratesIoStorage will exist until the lsp is stopped

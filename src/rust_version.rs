@@ -7,6 +7,25 @@ pub struct RustVersion {
     patch: Option<VersionString>,
 }
 
+impl RustVersion {
+    pub fn is_patch_int(&self) -> bool {
+        match &self.patch {
+            Some(v) => {
+                let items = v.int_or_string();
+                if items.len() == 1 {
+                    match items.first() {
+                        Some(IntOrString::Int(_)) => true,
+                        _ => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            None => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VersionString(String);
 
