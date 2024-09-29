@@ -777,8 +777,11 @@ impl Backend {
                 Some(
                     versions
                         .into_iter()
-                        .map(|v| CompletionItem {
+                        .rev()
+                        .enumerate()
+                        .map(|(index, v)| CompletionItem {
                             label: v.to_string(),
+                            sort_text: Some(format!("{:04}", index)),
                             detail: None,
                             text_edit: range.clone().map(|range| {
                                 CompletionTextEdit::Edit(TextEdit::new(range, v.to_string()))
@@ -848,19 +851,16 @@ impl Backend {
                 Some(
                     versions
                         .into_iter()
-                        .map(|v| CompletionItem {
+                        .rev()
+                        .enumerate()
+                        .map(|(index, v)| CompletionItem {
                             label: v.to_string(),
+                            sort_text: Some(format!("{:04}", index)),
                             detail: None,
                             text_edit: range.clone().map(|range| {
                                 CompletionTextEdit::Edit(TextEdit::new(range, v.to_string()))
                             }),
                             ..Default::default()
-                        })
-                        .rev()
-                        .enumerate()
-                        .map(|(index, mut item)| {
-                            item.sort_text = Some(format!("{:04}", index));
-                            item
                         })
                         .collect(),
                 )
