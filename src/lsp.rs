@@ -656,7 +656,8 @@ impl Backend {
         };
 
         let root_dep = self.get_root_dependencies(uri).await.unwrap_or_default();
-        let result = self.crates.read().await.search(&crate_name.value).await;
+        let mut result = self.crates.read().await.search(&crate_name.value).await;
+        result.sort_by(|(name_a, _, _), (name_b, _, _)| name_a.len().cmp(&name_b.len()));
         Some(
             result
                 .into_iter()
@@ -670,7 +671,6 @@ impl Backend {
                     }),
                     ..Default::default()
                 })
-                .rev()
                 .enumerate()
                 .map(|(index, mut item)| {
                     item.sort_text = Some(format!("{:04}", index));
