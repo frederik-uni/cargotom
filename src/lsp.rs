@@ -670,6 +670,7 @@ impl Backend {
                         true => format!("{name} = {} workspace = true {}", '{', '}'),
                         false => format!("{name} = \"{version}\""),
                     }),
+                    kind: Some(CompletionItemKind::SNIPPET),
                     ..Default::default()
                 })
                 .enumerate()
@@ -736,6 +737,7 @@ impl Backend {
                     true => Some(vec![CompletionItem {
                         label: "version...".to_string(),
                         detail: None,
+                        kind: Some(CompletionItemKind::SNIPPET),
                         text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
                             range,
                             format!(
