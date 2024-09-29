@@ -661,11 +661,12 @@ impl Backend {
         Some(
             result
                 .into_iter()
-                .filter(|(crate_name, _, _)| !existing_crates.contains(crate_name))
+                .filter(|(crate_name_, _, _)| {
+                    crate_name_ == &crate_name.value || !existing_crates.contains(crate_name_)
+                })
                 .map(|(name, detail, version)| CompletionItem {
                     label: name.clone(),
                     detail,
-                    filter_text: Some(format!("{name} = \"")),
                     insert_text: Some(match root_dep.contains(&name) {
                         true => format!("{name} = {} workspace = true {}", '{', '}'),
                         false => format!("{name} = \"{version}\""),
