@@ -665,6 +665,7 @@ impl Backend {
                 .map(|(name, detail, version)| CompletionItem {
                     label: name.clone(),
                     detail,
+                    filter_text: Some(format!("{name} = \"")),
                     insert_text: Some(match root_dep.contains(&name) {
                         true => format!("{name} = {} workspace = true {}", '{', '}'),
                         false => format!("{name} = \"{version}\""),

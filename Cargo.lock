@@ -200,7 +200,7 @@ checksum = "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
 
 [[package]]
 name = "cargotom"
-version = "0.13.1"
+version = "0.13.2"
 dependencies = [
  "clap",
  "git2",
