@@ -3,6 +3,7 @@ mod crate_lookup;
 mod generate_tree;
 mod git;
 mod helper;
+mod lock;
 pub mod lsp;
 mod rust_version;
 

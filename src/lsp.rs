@@ -466,6 +466,7 @@ impl LanguageServer for Backend {
         }
         let capabilities = ServerCapabilities {
             code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+            hover_provider: Some(HoverProviderCapability::Simple(true)),
             text_document_sync: Some(TextDocumentSyncCapability::Options(
                 TextDocumentSyncOptions {
                     open_close: Some(true),
@@ -502,6 +503,86 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::INFO, "LSP Initialized")
             .await;
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        if let Some(store) = self.toml_store.lock().await.get(
+            &params
+                .text_document_position_params
+                .text_document
+                .uri
+                .to_string(),
+        ) {
+            let byte_offset = get_byte_index_from_position(
+                store.text(),
+                params.text_document_position_params.position,
+            ) as u32;
+            if let Some(item) = store.tree.get_item_by_pos(byte_offset) {
+                if let Some(path) = get_after_key("dependencies", &item)
+                    .or(get_after_key("dev-dependencies", &item))
+                {
+                    let path = path.iter().map(|v| v.owned()).collect::<Vec<_>>();
+
+                    let over_features = path.iter().find(|v| match v {
+                        KeyOrValueOwned::Key(key) => key.value == "features",
+                        KeyOrValueOwned::Value(_) => false,
+                    });
+
+                    if let Some(KeyOrValueOwned::Key(key)) = over_features {
+                        let range = match path.last().unwrap() {
+                            KeyOrValueOwned::Key(key) => key.range.clone(),
+                            KeyOrValueOwned::Value(value) => {
+                                value.range().cloned().unwrap_or(key.range.clone())
+                            }
+                        };
+                        let crate_name = &path.first().unwrap().as_key().unwrap().value;
+
+                        if let Some(v) = store
+                            .crates_info
+                            .iter()
+                            .find(|v| &v.key.value == crate_name)
+                        {
+                            if let Some((version, _)) = v.get_version() {
+                                let features = self
+                                    .crates
+                                    .read()
+                                    .await
+                                    .get_features(crate_name, &version, "")
+                                    .await
+                                    .unwrap_or_default();
+                                return Ok(Some(Hover {
+                                    contents: HoverContents::Markup(MarkupContent {
+                                        kind: MarkupKind::Markdown,
+                                        value: features
+                                            .iter()
+                                            .map(|v| format!("- {}", v))
+                                            .collect::<Vec<_>>()
+                                            .join("\n"),
+                                    }),
+                                    range: Some(Range::new(
+                                        store.byte_offset_to_position(range.start),
+                                        store.byte_offset_to_position(range.end),
+                                    )),
+                                }));
+                            }
+                        } else {
+                            return Ok(Some(Hover {
+                                contents: HoverContents::Markup(MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: format!("{:?}", store.crates_info),
+                                }),
+                                range: Some(Range::new(
+                                    store.byte_offset_to_position(key.range.start),
+                                    store.byte_offset_to_position(key.range.end),
+                                )),
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
