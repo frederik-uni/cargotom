@@ -115,7 +115,7 @@ impl CratesIoStorage {
         true
     }
     pub fn stop(&self) {
-        exit(0)
+        exit(0);
     }
     pub async fn search(&self, query: &str) -> Vec<(String, Option<String>, String)> {
         let lock = self.data.read().await;

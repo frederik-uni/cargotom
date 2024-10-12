@@ -56,8 +56,8 @@ fn start_daemon(port: u16, storage: &Path, stable: bool, offline: bool, per_page
 impl Deamon {
     async fn handle_error(&self, e: tcp_struct::Error) {
         match e {
-            tcp_struct::Error::StreamError(error) => match error.kind() {
-                std::io::ErrorKind::ConnectionRefused => {
+            tcp_struct::Error::StreamError(error) => match error.kind.as_str() {
+                "connection refused" => {
                     if let Deamon::Deamon((_, config, path)) = &self {
                         start_daemon(
                             config.daemon_port,
@@ -416,29 +416,34 @@ impl LanguageServer for Backend {
                 let daemon = CratesIoStorage::read(config.daemon_port, crate_version());
                 match daemon.update(config).await {
                     Ok(_) => {}
-                    Err(err) => match err {
-                        tcp_struct::Error::StreamError(error) => match error.kind() {
-                            std::io::ErrorKind::ConnectionRefused => start_daemon(
-                                config.daemon_port,
-                                &self.path,
-                                config.stable,
-                                config.offline,
-                                config.per_page_web,
-                            ),
+                    Err(err) => {
+                        self.client
+                            .log_message(MessageType::INFO, format!("{err:?}"))
+                            .await;
+                        match err {
+                            tcp_struct::Error::StreamError(error) => match error.kind.as_str() {
+                                "connection refused" => start_daemon(
+                                    config.daemon_port,
+                                    &self.path,
+                                    config.stable,
+                                    config.offline,
+                                    config.per_page_web,
+                                ),
+                                _ => {}
+                            },
+                            tcp_struct::Error::ApiMisMatch(_) => {
+                                let _ = daemon.stop().await;
+                                start_daemon(
+                                    config.daemon_port,
+                                    &self.path,
+                                    config.stable,
+                                    config.offline,
+                                    config.per_page_web,
+                                );
+                            }
                             _ => {}
-                        },
-                        tcp_struct::Error::ApiMisMatch(_) => {
-                            let _ = daemon.stop().await;
-                            start_daemon(
-                                config.daemon_port,
-                                &self.path,
-                                config.stable,
-                                config.offline,
-                                config.per_page_web,
-                            );
                         }
-                        _ => {}
-                    },
+                    }
                 }
                 *self.crates.write().await = Deamon::Deamon((daemon, config, self.path.clone()));
             }
