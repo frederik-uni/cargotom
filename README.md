@@ -29,8 +29,11 @@
 - check if crate features exist
 
 ## Plans
-- features
-  - code action make optional if not & diagnostics if not
-  - diagnostics if version is set & dep in workspace
-  - diagnostics when workspace modules have dep overlap
-  - diagnostics when feature duplicate
+- diagnostics
+  - code action make optional if not & used & warn
+  - check if version is set & dep in workspace
+  - check when workspace modules have dep overlap
+  - check when feature duplicate
+  - check if optional dep are used
+- inlay hints for version used(Cargo.lock)
+- hover over features for available features

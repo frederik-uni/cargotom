@@ -1,34 +1,199 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::read_to_string;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::crate_lookup::{CratesIoStorage, Shared};
+use crate::crate_lookup::{CratesIoStorage, CratesIoStorageReader, Shared};
 use crate::generate_tree::{
     get_after_key, parse_toml, Key, KeyOrValue, KeyOrValueOwned, RangeExclusive, Tree, TreeValue,
     Value,
 };
-use crate::helper::{get_byte_index_from_position, new_workspace_edit, shared};
+use crate::helper::{crate_version, get_byte_index_from_position, new_workspace_edit, shared};
 use crate::rust_version::RustVersion;
 
 struct Backend {
-    crates: Shared<CratesIoStorage>,
+    crates: Shared<Deamon>,
     client: Client,
     workspace_root: Shared<Option<PathBuf>>,
     path: PathBuf,
     toml_store: Arc<Mutex<HashMap<String, Store>>>,
 }
 
-#[derive(Debug, Deserialize, Default)]
-struct Config {
-    offline: Option<bool>,
-    stable: Option<bool>,
-    per_page_web: Option<u32>,
+enum Deamon {
+    Deamon((CratesIoStorageReader, Config, PathBuf)),
+    NoDeamon(CratesIoStorage),
+    Starting,
+}
+
+fn start_daemon(port: u16, storage: &Path, stable: bool, offline: bool, per_page_web: u32) {
+    let mut args = vec![
+        "--daemon".to_string(),
+        port.to_string(),
+        "--storage".to_string(),
+        storage.display().to_string(),
+        "--per-page-web".to_string(),
+        per_page_web.to_string(),
+    ];
+    if stable {
+        args.push("--stable".to_string());
+    }
+    if offline {
+        args.push("--offline".to_string());
+    }
+
+    // let current_exe = std::env::current_exe().expect("Failed to get current executable path");
+    let current_exe = "/Users/frederik/.cargo/target/debug/cargotom";
+
+    // Spawn a new process with the current executable and the arguments
+    let v = std::process::Command::new(current_exe).args(&args).spawn();
+}
+
+impl Deamon {
+    async fn handle_error(&self, e: tcp_struct::Error) {
+        match e {
+            tcp_struct::Error::StreamError(error) => match error.kind() {
+                std::io::ErrorKind::ConnectionRefused => {
+                    if let Deamon::Deamon((_, config, path)) = &self {
+                        start_daemon(
+                            config.daemon_port,
+                            &path,
+                            config.stable,
+                            config.offline,
+                            config.per_page_web,
+                        );
+                    }
+                }
+                _ => {}
+            },
+            tcp_struct::Error::ApiMisMatch(_) => match self {
+                Deamon::Deamon((daemon, config, path)) => {
+                    let _ = daemon.stop().await;
+                    start_daemon(
+                        config.daemon_port,
+                        &path,
+                        config.stable,
+                        config.offline,
+                        config.per_page_web,
+                    );
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    async fn search(&self, query: &str) -> Vec<(String, Option<String>, String)> {
+        match self {
+            Deamon::Deamon((v, _, _)) => match v.search(query).await {
+                Ok(v) => v,
+                Err(e) => {
+                    self.handle_error(e).await;
+                    Default::default()
+                }
+            },
+            Deamon::NoDeamon(arc) => arc.search(query).await,
+            Deamon::Starting => Default::default(),
+        }
+    }
+    async fn get_version_local(&self, name: &str) -> Option<Vec<RustVersion>> {
+        match self {
+            Deamon::Deamon((daemon, _, _)) => match daemon.get_version_local(name).await {
+                Ok(v) => v,
+                Err(e) => {
+                    self.handle_error(e).await;
+                    Default::default()
+                }
+            },
+            Deamon::NoDeamon(storage) => storage.get_version_local(name).await,
+            Deamon::Starting => Default::default(),
+        }
+    }
+    async fn get_versions(&self, name: &str, version_filter: &str) -> Option<Vec<RustVersion>> {
+        match self {
+            Deamon::Deamon((daemon, _, _)) => match daemon.get_versions(name, version_filter).await
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    self.handle_error(e).await;
+                    Default::default()
+                }
+            },
+            Deamon::NoDeamon(storage) => storage.get_versions(name, version_filter).await,
+            Deamon::Starting => Default::default(),
+        }
+    }
+
+    async fn get_features_local(&self, name: &str, version: &str) -> Option<Vec<String>> {
+        match self {
+            Deamon::Deamon((daemon, _, _)) => {
+                match daemon.get_features_local(name, version).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        self.handle_error(e).await;
+                        Default::default()
+                    }
+                }
+            }
+            Deamon::NoDeamon(storage) => storage.get_features_local(name, version).await,
+            Deamon::Starting => Default::default(),
+        }
+    }
+
+    async fn get_features(&self, name: &str, version: &str, search: &str) -> Option<Vec<String>> {
+        match self {
+            Deamon::Deamon((daemon, _, _)) => {
+                match daemon.get_features(name, version, search).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        self.handle_error(e).await;
+                        Default::default()
+                    }
+                }
+            }
+            Deamon::NoDeamon(storage) => storage.get_features(name, version, search).await,
+            Deamon::Starting => Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+pub struct Config {
+    #[serde(default = "true_default")]
+    offline: bool,
+    #[serde(default = "true_default")]
+    stable: bool,
+    #[serde(default = "per_page_web_default")]
+    per_page_web: u32,
+    #[serde(default = "true_default")]
+    daemon: bool,
+    #[serde(default = "daemon_port_default")]
+    daemon_port: u16,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            offline: true,
+            stable: true,
+            per_page_web: 25,
+            daemon: true,
+            daemon_port: 54218,
+        }
+    }
+}
+
+fn true_default() -> bool {
+    true
+}
+fn per_page_web_default() -> u32 {
+    25
+}
+fn daemon_port_default() -> u16 {
+    8080
 }
 
 #[derive(Debug)]
@@ -77,14 +242,17 @@ impl Store {
 
     pub async fn unknown_features(
         &self,
-        crates: &Shared<CratesIoStorage>,
+        crates: &Shared<Deamon>,
     ) -> Vec<(String, RangeExclusive, String)> {
-        let lock = crates.read().await;
         let mut res = vec![];
         for cr in self.crates_info.iter() {
             let crate_name = &cr.key.value;
             if let Some((version, _)) = cr.get_version() {
-                let features = lock.get_features_local(crate_name, &version).await;
+                let features = crates
+                    .read()
+                    .await
+                    .get_features_local(crate_name, &version)
+                    .await;
                 let existing_features = cr.get_features();
                 if let Some(features) = features {
                     let mut existing_features = existing_features
@@ -101,15 +269,16 @@ impl Store {
 
     pub async fn needs_update(
         &self,
-        crates: &Shared<CratesIoStorage>,
+        crates: &Shared<Deamon>,
     ) -> Option<Vec<(String, RangeExclusive, String)>> {
-        let lock = crates.read().await;
         let mut updates = vec![];
         for cr in self.crates_info.iter() {
             let crate_name = &cr.key.value;
             if let Some((version, range)) = cr.get_version() {
                 let crate_version = RustVersion::try_from(version.as_str()).ok()?;
-                let mut versions = lock
+                let mut versions = crates
+                    .read()
+                    .await
                     .get_version_local(crate_name)
                     .await
                     .unwrap_or_default()
@@ -128,15 +297,14 @@ impl Store {
 
     pub async fn invalid_versions(
         &self,
-        crates: &Shared<CratesIoStorage>,
+        crates: &Shared<Deamon>,
     ) -> Option<Vec<(String, RangeExclusive)>> {
-        let lock = crates.read().await;
         let mut updates = vec![];
         for cr in self.crates_info.iter() {
             let crate_name = &cr.key.value;
             if let Some((version, range)) = cr.get_version() {
                 let crate_version = RustVersion::try_from(version.as_str()).ok()?;
-                if let Some(v) = lock.get_version_local(crate_name).await {
+                if let Some(v) = crates.read().await.get_version_local(crate_name).await {
                     if v.iter().find(|v| (*v) == &crate_version).is_none() {
                         updates.push((crate_name.clone(), range));
                     }
@@ -243,12 +411,47 @@ impl LanguageServer for Backend {
             .map(serde_json::from_value)
             .and_then(|v| v.ok())
             .unwrap_or_default();
-        *self.crates.write().await = CratesIoStorage::new(
-            &self.path,
-            config.stable.unwrap_or(true),
-            config.offline.unwrap_or(true),
-            config.per_page_web.unwrap_or(25),
-        );
+        match config.daemon {
+            true => {
+                let daemon = CratesIoStorage::read(config.daemon_port, crate_version());
+                match daemon.update(config).await {
+                    Ok(_) => {}
+                    Err(err) => match err {
+                        tcp_struct::Error::StreamError(error) => match error.kind() {
+                            std::io::ErrorKind::ConnectionRefused => start_daemon(
+                                config.daemon_port,
+                                &self.path,
+                                config.stable,
+                                config.offline,
+                                config.per_page_web,
+                            ),
+                            _ => {}
+                        },
+                        tcp_struct::Error::ApiMisMatch(_) => {
+                            let _ = daemon.stop().await;
+                            start_daemon(
+                                config.daemon_port,
+                                &self.path,
+                                config.stable,
+                                config.offline,
+                                config.per_page_web,
+                            );
+                        }
+                        _ => {}
+                    },
+                }
+                *self.crates.write().await = Deamon::Deamon((daemon, config, self.path.clone()));
+            }
+            false => {
+                *self.crates.write().await = Deamon::NoDeamon(CratesIoStorage::new(
+                    &self.path,
+                    config.stable,
+                    config.offline,
+                    config.per_page_web,
+                ));
+            }
+        }
+
         if let Some(root_uri) = params.root_uri {
             let path = root_uri.to_file_path().unwrap();
             let file = path.join("Cargo.toml");
@@ -974,7 +1177,7 @@ pub async fn main(path: PathBuf) {
     let (client, server) = LspService::build(|client| Backend {
         client,
         toml_store: Default::default(),
-        crates: shared(CratesIoStorage::dummy()),
+        crates: shared(Deamon::Starting),
         path,
         workspace_root: shared(None),
     })

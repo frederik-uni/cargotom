@@ -1,6 +1,8 @@
 use std::{cmp::Ordering, fmt::Display, num::ParseIntError};
 
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RustVersion {
     major: Option<u32>,
     minor: Option<u32>,
@@ -26,7 +28,7 @@ impl RustVersion {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VersionString(String);
 
 impl VersionString {

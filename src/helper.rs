@@ -16,6 +16,10 @@ pub fn shared<T>(t: T) -> Shared<T> {
     Arc::new(RwLock::new(t))
 }
 
+pub fn crate_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 pub fn get_byte_index_from_position(s: &str, position: Position) -> usize {
     if s.is_empty() {
         return 0;

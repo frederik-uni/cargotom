@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs::{read_dir, read_to_string},
     path::{Path, PathBuf},
+    process::exit,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -9,6 +10,7 @@ use std::{
 type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<(String, Vec<Arc<String>>)>)>>>;
 
 use reqwest::Client;
+use tcp_struct::{register_impl, TCPShare};
 use tokio::{sync::RwLock, time::sleep};
 use trie_rs::map::{Trie, TrieBuilder};
 
@@ -16,34 +18,31 @@ use crate::{
     api::{InfoCacheEntry, SearchCacheEntry},
     git::updated_local_git,
     helper::shared,
+    lsp::Config,
     rust_version::RustVersion,
 };
-
 pub type Shared<T> = Arc<RwLock<T>>;
-#[derive(Clone)]
-pub struct CratesIoStorage {
-    pub search_cache: Shared<HashMap<String, SearchCacheEntry>>,
-    pub versions_cache: Shared<HashMap<String, InfoCacheEntry>>,
-    last_checked: Shared<Duration>,
-    updating: Shared<bool>,
-    pub client: Client,
-    pub stable: bool,
-    pub per_page: u32,
-    pub data: Shared<OfflineCratesData>,
-}
 
 impl CratesIoStorage {
-    pub fn dummy() -> Self {
-        Self {
+    pub fn new(path: &Path, stable: bool, offline: bool, per_page_online: u32) -> Self {
+        let data = shared(match offline {
+            true => read_data(path),
+            false => Default::default(),
+        });
+        let sel = Self {
+            per_page: per_page_online,
+            last_checked: shared(Duration::from_micros(0)),
+            updating: shared(false),
+            data,
+            client: Client::new(),
+            stable,
             search_cache: Default::default(),
             versions_cache: Default::default(),
-            last_checked: Default::default(),
-            updating: Default::default(),
-            client: Default::default(),
-            stable: Default::default(),
-            per_page: Default::default(),
-            data: Default::default(),
+        };
+        if offline {
+            update_thread(sel.clone(), path.to_path_buf());
         }
+        sel
     }
 }
 
@@ -110,28 +109,14 @@ fn post_process_value(value: Vec<(String, Vec<String>)>) -> Vec<(String, Vec<Arc
     out
 }
 
+#[register_impl]
 impl CratesIoStorage {
-    pub fn new(path: &Path, stable: bool, offline: bool, per_page_online: u32) -> Self {
-        let data = shared(match offline {
-            true => read_data(path),
-            false => Default::default(),
-        });
-        let sel = Self {
-            per_page: per_page_online,
-            last_checked: shared(Duration::from_micros(0)),
-            updating: shared(false),
-            data,
-            client: Client::new(),
-            stable,
-            search_cache: Default::default(),
-            versions_cache: Default::default(),
-        };
-        if offline {
-            update_thread(sel.clone(), path.to_path_buf());
-        }
-        sel
+    pub fn update(&self, config: Config) -> bool {
+        true
     }
-
+    pub fn stop(&self) {
+        exit(0)
+    }
     pub async fn search(&self, query: &str) -> Vec<(String, Option<String>, String)> {
         let lock = self.data.read().await;
         if let Some(v) = &*lock {
@@ -366,4 +351,16 @@ async fn update(toml_data: CratesIoStorage, path: &Path) {
     }
     *toml_data.updating.write().await = false;
     *toml_data.last_checked.write().await = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+}
+
+#[derive(Clone, TCPShare)]
+pub struct CratesIoStorage {
+    pub search_cache: Shared<HashMap<String, SearchCacheEntry>>,
+    pub versions_cache: Shared<HashMap<String, InfoCacheEntry>>,
+    last_checked: Shared<Duration>,
+    updating: Shared<bool>,
+    pub client: Client,
+    pub stable: bool,
+    pub per_page: u32,
+    pub data: Shared<OfflineCratesData>,
 }
