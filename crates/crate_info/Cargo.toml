@@ -1,0 +1,16 @@
+[package]
+name = "crate_info"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+reqwest = { workspace = true, features = ["json"] }
+tcp-struct = { workspace = true }
+parser = { workspace = true }
+util = { workspace = true }
+trie-rs = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+urlencoding = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-std"] }
+git2 = { version = "0.19.0", features = ["vendored-openssl"] }

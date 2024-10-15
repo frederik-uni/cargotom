@@ -1,3 +1,7 @@
+mod api;
+mod git;
+pub mod shared;
+
 use std::{
     collections::HashMap,
     fs::{read_dir, read_to_string},
@@ -9,19 +13,17 @@ use std::{
 
 type OfflineCratesData = Option<Trie<u8, Vec<(String, Vec<(String, Vec<Arc<String>>)>)>>>;
 
+use parser::structure::RustVersion;
 use reqwest::Client;
 use tcp_struct::{register_impl, TCPShare};
-use tokio::{sync::RwLock, time::sleep};
+use tokio::time::sleep;
 use trie_rs::map::{Trie, TrieBuilder};
+use util::{config::Config, shared, Shared};
 
 use crate::{
     api::{InfoCacheEntry, SearchCacheEntry},
     git::updated_local_git,
-    helper::shared,
-    lsp::Config,
-    rust_version::RustVersion,
 };
-pub type Shared<T> = Arc<RwLock<T>>;
 
 impl CratesIoStorage {
     pub fn new(path: &Path, stable: bool, offline: bool, per_page_online: u32) -> Self {
@@ -112,6 +114,7 @@ fn post_process_value(value: Vec<(String, Vec<String>)>) -> Vec<(String, Vec<Arc
 #[register_impl]
 impl CratesIoStorage {
     pub fn update(&self, config: Config) -> bool {
+        //TODO: update daemon
         true
     }
     pub fn stop(&self) {

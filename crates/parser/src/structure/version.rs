@@ -1,3 +1,4 @@
+//TODO: refactor
 use std::{cmp::Ordering, fmt::Display, num::ParseIntError};
 
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,16 @@ pub struct RustVersion {
 }
 
 impl RustVersion {
+    pub fn mahor(&self) -> Option<u32> {
+        self.major
+    }
+    pub fn minor(&self) -> Option<u32> {
+        self.minor
+    }
+    pub fn patch(&self) -> Option<&VersionString> {
+        self.patch.as_ref()
+    }
+
     pub fn is_patch_int(&self) -> bool {
         match &self.patch {
             Some(v) => {
