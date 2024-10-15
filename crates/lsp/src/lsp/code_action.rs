@@ -2,7 +2,7 @@ use parser::structure::Source;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse, Command,
-    Range, TextEdit,
+    MessageType, Range, TextEdit,
 };
 
 use crate::context::Context;
@@ -14,6 +14,38 @@ impl Context {
         params: CodeActionParams,
     ) -> Option<Result<Option<CodeActionResponse>>> {
         let mut actions = vec![];
+
+        if params.range.start.line == 0 || params.range.end.line == 0 {
+            self.client
+                .log_message(MessageType::INFO, format!("{:?}", params))
+                .await;
+            let action = CodeAction {
+                title: "Open LSP docs".to_string(),
+                kind: Some(CodeActionKind::EMPTY),
+                command: Some(Command {
+                    title: "Open LSP docs".to_string(),
+                    command: "open_url".to_string(),
+                    arguments: Some(vec![serde_json::Value::String(
+                        "https://github.com/frederik-uni/cargotom/blob/main/README.md".to_owned(),
+                    )]),
+                }),
+                ..CodeAction::default()
+            };
+            actions.push(CodeActionOrCommand::CodeAction(action));
+            let action = CodeAction {
+                title: "Report LSP issue/Suggest feature".to_string(),
+                kind: Some(CodeActionKind::EMPTY),
+                command: Some(Command {
+                    title: "Report LSP issue/Suggest feature".to_string(),
+                    command: "open_url".to_string(),
+                    arguments: Some(vec![serde_json::Value::String(
+                        "https://github.com/frederik-uni/cargotom/issues".to_owned(),
+                    )]),
+                }),
+                ..CodeAction::default()
+            };
+            actions.push(CodeActionOrCommand::CodeAction(action));
+        }
         if let Some(toml) = self
             .toml_store
             .read()
@@ -25,7 +57,10 @@ impl Context {
                 get_byte_index_from_position(toml.text(), params.range.start) as u32;
             let byte_offset_end =
                 get_byte_index_from_position(toml.text(), params.range.end) as u32;
-            let dep = toml.get_dependency_by_range(byte_offset_start, byte_offset_end)?;
+            let dep = match toml.get_dependency_by_range(byte_offset_start, byte_offset_end) {
+                Some(v) => v,
+                None => return Some(Ok(Some(actions))),
+            };
             if dep.data.name.end == dep.end {
                 let start = toml.byte_offset_to_position(dep.data.name.end);
                 let action = CodeAction {

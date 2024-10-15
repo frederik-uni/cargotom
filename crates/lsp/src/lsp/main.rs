@@ -93,10 +93,7 @@ impl LanguageServer for Context {
             self.open_files(members, lock_file, Workspace::module(v))
                 .await;
         }
-        let diagnostics = self.analyze(&uri).await;
-        self.client
-            .publish_diagnostics(uri_, diagnostics, None)
-            .await;
+        let diagnostics = self.analyze(&uri_).await;
         let _ = self.client.inlay_hint_refresh().await;
     }
 
@@ -177,10 +174,7 @@ impl LanguageServer for Context {
                 self.open_files(members, lock_file, Workspace::module(path))
                     .await;
             }
-            let diagnostics = self.analyze(&uri.to_string()).await;
-            self.client
-                .publish_diagnostics(uri, diagnostics, None)
-                .await;
+            let diagnostics = self.analyze(&uri).await;
         }
     }
 
@@ -203,6 +197,7 @@ pub async fn main(path: PathBuf) {
         crates: shared(CrateLookUp::Starting),
         path,
         workspace_root: shared(None),
+        hide_docs_info_message: shared(false),
     })
     .finish();
 

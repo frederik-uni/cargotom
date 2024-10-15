@@ -1,4 +1,18 @@
 # cargotom
+## Config
+```json
+"lsp": {
+  "cargo-tom": {
+    "initialization_options": {
+      "hide_docs_info_message": true,
+      "offline": false,
+      "stable": false,
+      "per_page_web": 50
+    }
+  },
+  ...
+}
+```
 ## Features
 ### Code actions
 - "Make Workspace dependency" => This will generate `{ workspace = true }` for the dependency

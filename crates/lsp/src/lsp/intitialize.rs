@@ -186,6 +186,7 @@ impl Context {
 impl Context {
     pub async fn initialize_(&self, params: InitializeParams) -> Result<InitializeResult> {
         let config = load_config(&params);
+        *self.hide_docs_info_message.write().await = config.hide_docs_info_message;
         self.deamon_update(config).await;
         self.init_cache(&params).await;
         let capabilities = ServerCapabilities {

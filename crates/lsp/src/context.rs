@@ -18,6 +18,7 @@ pub struct Context {
     pub client: Client,
     pub workspace_root: Shared<Option<PathBuf>>,
     pub path: PathBuf,
+    pub hide_docs_info_message: Shared<bool>,
     pub toml_store: Shared<HashMap<String, Toml>>,
 }
 
