@@ -28,6 +28,8 @@
 - [x] "Upgrade All " => will upgrade every dependency version to the latest version
 - [x] "Update All" => will run `cargo run`
 - [ ] toggle optional dependency
+- [ ] make dependency optional if in feature
+
 
 ### Inlay Hint
 - [x] used version in Cargo.lock

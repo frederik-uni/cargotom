@@ -10,7 +10,3 @@ toml = { workspace = true }
 serde_json = { workspace = true }
 taplo = { workspace = true }
 difference = "2.0.0"
-
-[target.'cfg(windows)'.dependencies]
-libc = "0.2.147"
-
