@@ -46,12 +46,7 @@ impl Context {
             };
             actions.push(CodeActionOrCommand::CodeAction(action));
         }
-        if let Some(toml) = self
-            .toml_store
-            .read()
-            .await
-            .get(&params.text_document.uri.to_string())
-        {
+        if let Some(toml) = self.toml_store.read().await.get(&params.text_document.uri) {
             let uri = params.text_document.uri;
             let byte_offset_start =
                 get_byte_index_from_position(toml.text(), params.range.start) as u32;

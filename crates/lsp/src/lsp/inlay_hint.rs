@@ -9,11 +9,11 @@ impl Context {
         params: InlayHintParams,
     ) -> Option<Result<Option<Vec<InlayHint>>>> {
         let toml = self.toml_store.read().await;
-        let cargo_ = toml.get(&params.text_document.uri.to_string())?;
+        let cargo_ = toml.get(&params.text_document.uri)?;
         let cargo = cargo_.as_cargo()?;
         let lock = cargo.lock_file_path.as_ref()?;
         let lock_uri = Url::from_file_path(&lock).ok()?;
-        let packages = toml.get(&lock_uri.to_string())?.as_lock()?.packages();
+        let packages = toml.get(&lock_uri)?.as_lock()?.packages();
         let hints = cargo
             .positioned_info
             .dependencies

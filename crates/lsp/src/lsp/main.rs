@@ -80,9 +80,8 @@ impl LanguageServer for Context {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri_ = params.text_document.uri.clone();
-        let uri = uri_.to_string();
-        if !uri.ends_with("/Cargo.toml") || uri.ends_with("Cargo.lock") {
+        let uri = params.text_document.uri.clone();
+        if !uri.to_string().ends_with("/Cargo.toml") || uri.to_string().ends_with("Cargo.lock") {
             return;
         }
         let (members, lock_file) = if let Some(v) = self.toml_store.write().await.get_mut(&uri) {
@@ -94,14 +93,14 @@ impl LanguageServer for Context {
         } else {
             (vec![], None)
         };
-        if let Ok(v) = uri_
+        if let Ok(v) = uri
             .to_file_path()
             .map(|v| remove_file_prefix(&v).unwrap_or(v))
         {
             self.open_files(members, lock_file, Workspace::module(v))
                 .await;
         }
-        let diagnostics = self.analyze(&uri_).await;
+        let diagnostics = self.analyze(&uri).await;
         let _ = self.client.inlay_hint_refresh().await;
     }
 
@@ -127,7 +126,7 @@ impl LanguageServer for Context {
                 .toml_store
                 .write()
                 .await
-                .remove(&uri.to_string())
+                .remove(&uri)
                 .map(|v| match v {
                     Toml::Cargo { cargo, .. } => (cargo.lock_file_path, Some(cargo.info.workspace)),
                     _ => (None, None),
@@ -143,7 +142,7 @@ impl LanguageServer for Context {
             };
             let root = store.reload();
             if let Some(root) = root {
-                let _ = self.toml_store.write().await.insert(uri.to_string(), store);
+                let _ = self.toml_store.write().await.insert(uri.clone(), store);
                 let uri = match Url::from_file_path(&root) {
                     Ok(v) => v,
                     Err(_) => return,
@@ -153,7 +152,7 @@ impl LanguageServer for Context {
                     .toml_store
                     .write()
                     .await
-                    .remove(&uri.to_string())
+                    .remove(&uri)
                     .map(|v| match v {
                         Toml::Cargo { cargo, .. } => {
                             (cargo.lock_file_path, Some(cargo.info.workspace))
@@ -172,13 +171,13 @@ impl LanguageServer for Context {
                 let _ = store.reload();
                 let lock_file = store.as_cargo().and_then(|v| v.lock_file_path.clone());
                 let members = store.get_members();
-                let _ = self.toml_store.write().await.insert(uri.to_string(), store);
+                let _ = self.toml_store.write().await.insert(uri, store);
                 self.open_files(members, lock_file, Workspace::module(path))
                     .await;
             } else {
                 let members = store.get_members();
                 let lock_file = store.as_cargo().and_then(|v| v.lock_file_path.clone());
-                let _ = self.toml_store.write().await.insert(uri.to_string(), store);
+                let _ = self.toml_store.write().await.insert(uri.clone(), store);
                 self.open_files(members, lock_file, Workspace::module(path))
                     .await;
             }

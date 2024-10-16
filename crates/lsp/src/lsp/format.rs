@@ -9,7 +9,7 @@ impl Context {
         params: DocumentFormattingParams,
     ) -> Option<Result<Option<Vec<TextEdit>>>> {
         let temp = self.toml_store.read().await;
-        let toml = temp.get(&params.text_document.uri.to_string())?;
+        let toml = temp.get(&params.text_document.uri)?;
         let raw = toml.as_raw()?;
         let v: Vec<TextEdit> = raw
             .format(

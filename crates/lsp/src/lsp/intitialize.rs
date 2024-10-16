@@ -95,19 +95,19 @@ impl Context {
             {
                 if let Some(lock) = Lock::new(text) {
                     let lock = Toml::Lock(lock);
-                    let _ = self.toml_store.write().await.insert(uri.to_string(), lock);
+                    let _ = self.toml_store.write().await.insert(uri, lock);
                     lock_file_path = Some(lockfile)
                 }
             }
             if let Some((toml, root, uri)) = self.path_to_toml(file, &mut lock_file_path) {
-                let _ = self.toml_store.write().await.insert(uri.to_string(), toml);
+                let _ = self.toml_store.write().await.insert(uri, toml);
 
                 if let Some(root) = root {
                     if let Some((toml, _, uri)) =
                         self.path_to_toml(root.clone(), &mut lock_file_path)
                     {
                         let members = toml.get_members();
-                        let _ = self.toml_store.write().await.insert(uri.to_string(), toml);
+                        let _ = self.toml_store.write().await.insert(uri, toml);
                         self.open_files(
                             members,
                             lock_file_path,
@@ -158,10 +158,9 @@ impl Context {
                                 continue;
                             }
                         };
-                        let uri_ = uri.to_string();
 
                         let mut lock = self.toml_store.write().await;
-                        if lock.get(&uri_).is_none() {
+                        if lock.get(&uri).is_none() {
                             if let Ok(path) = uri.to_file_path() {
                                 if let Ok(text) = read_to_string(path) {
                                     let mut toml = Toml::Cargo {
@@ -169,7 +168,7 @@ impl Context {
                                         raw: CargoRawData::new(text),
                                     };
                                     toml.reload();
-                                    lock.insert(uri_, toml);
+                                    lock.insert(uri, toml);
                                 }
                             }
                         }

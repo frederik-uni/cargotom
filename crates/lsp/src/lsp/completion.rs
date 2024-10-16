@@ -4,7 +4,7 @@ use parser::structure::{Dependency, Feature, FeatureArgKind, Positioned};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CompletionItem, CompletionItemKind, CompletionList, CompletionParams, CompletionResponse,
-    CompletionTextEdit, MessageType, TextEdit,
+    CompletionTextEdit, TextEdit,
 };
 
 impl Context {
@@ -14,7 +14,7 @@ impl Context {
     ) -> Option<Result<Option<CompletionResponse>>> {
         let uri = params.text_document_position.text_document.uri;
         let toml = self.toml_store.read().await;
-        let toml = toml.get(&uri.to_string())?;
+        let toml = toml.get(&uri)?;
 
         let byte_offset =
             get_byte_index_from_position(toml.text(), params.text_document_position.position)

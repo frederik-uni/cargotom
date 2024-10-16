@@ -20,7 +20,7 @@ pub struct Context {
     pub path: PathBuf,
     pub hide_docs_info_message: Shared<bool>,
     pub sort: Shared<bool>,
-    pub toml_store: Shared<HashMap<String, Toml>>,
+    pub toml_store: Shared<HashMap<Url, Toml>>,
 }
 
 impl Context {

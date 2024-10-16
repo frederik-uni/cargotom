@@ -9,7 +9,7 @@ impl Context {
     pub async fn hover_(&self, params: HoverParams) -> Option<Result<Option<Hover>>> {
         let uri = params.text_document_position_params.text_document.uri;
         let toml = self.toml_store.read().await;
-        let toml = toml.get(&uri.to_string())?;
+        let toml = toml.get(&uri)?;
 
         let byte_offset = get_byte_index_from_position(
             toml.text(),
