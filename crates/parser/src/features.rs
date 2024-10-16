@@ -1,3 +1,5 @@
+use crate::structure::FeatureArgKind;
+
 use super::structure::{Feature, Positioned, Value};
 
 pub fn get_features(value: &Value) -> Option<Vec<Positioned<Feature>>> {
@@ -12,9 +14,14 @@ pub fn get_features(value: &Value) -> Option<Vec<Positioned<Feature>>> {
                     .filter_map(|v| v.as_str())
                     .map(|v| v.into())
                     .collect::<Vec<_>>();
+                let max = args
+                    .iter()
+                    .map(|v: &FeatureArgKind| v.range().end)
+                    .max()
+                    .unwrap_or(tree_value.key.range.end);
                 out.push(Positioned {
                     start: tree_value.key.range.start,
-                    end: tree_value.key.range.end,
+                    end: tree_value.key.range.end.max(max),
                     data: Feature { name, args },
                 });
             }

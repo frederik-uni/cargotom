@@ -1,6 +1,6 @@
 use crate::context::{Context, Toml};
 use crate::util::get_byte_index_from_position;
-use parser::structure::{Dependency, Positioned};
+use parser::structure::{Dependency, Feature, FeatureArgKind, Positioned};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CompletionItem, CompletionItemKind, CompletionList, CompletionParams, CompletionResponse,
@@ -19,12 +19,22 @@ impl Context {
         let byte_offset =
             get_byte_index_from_position(toml.text(), params.text_document_position.position)
                 as u32;
+        if let Some(Ok(Some(v))) = self.dependency_suggestion(toml, byte_offset).await {
+            Some(Ok(Some(v)))
+        } else if let Some(v) = self.feature_suggestion(toml, byte_offset).await {
+            Some(Ok(Some(CompletionResponse::Array(v))))
+        } else {
+            None
+        }
+    }
 
+    async fn dependency_suggestion(
+        &self,
+        toml: &Toml,
+        byte_offset: u32,
+    ) -> Option<Result<Option<CompletionResponse>>> {
         let dep = toml.get_dependency(byte_offset)?;
-        if dep.data.name.contains_inclusive(byte_offset) {
-            self.client
-                .log_message(MessageType::INFO, format!("name value {:?}", dep.data.name))
-                .await;
+        Some(if dep.data.name.contains_inclusive(byte_offset) {
             let existing_crates = toml
                 .as_cargo()?
                 .positioned_info
@@ -84,8 +94,110 @@ impl Context {
                 is_incomplete: false,
                 items: v,
             }))));
-        }
+        });
         None
+    }
+
+    async fn feature_suggestion(
+        &self,
+        toml: &Toml,
+        byte_offset: u32,
+    ) -> Option<Vec<CompletionItem>> {
+        let feature = toml.get_feature(byte_offset)?;
+        let arg = feature
+            .data
+            .args
+            .iter()
+            .find(|v| v.range().contains_inclusive(byte_offset))?;
+
+        let suggestions = self
+            .crate_feature_completion(toml, &feature.data, arg)
+            .await?;
+        Some(suggestions)
+    }
+
+    async fn crate_feature_completion(
+        &self,
+        toml: &Toml,
+        feature: &Feature,
+        query: &FeatureArgKind,
+    ) -> Option<Vec<CompletionItem>> {
+        let toml = toml.as_cargo()?;
+        let out = match query {
+            FeatureArgKind::CrateFeature(query) => {
+                let existing_features = feature
+                    .args
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>();
+                let mut features = toml
+                    .positioned_info
+                    .features
+                    .iter()
+                    .filter(|v| v.data.name.data.starts_with(&query.data))
+                    .map(|v| &v.data.name.data)
+                    .filter(|v| !existing_features.contains(v))
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>();
+
+                features.extend(
+                    toml.positioned_info
+                        .dependencies
+                        .iter()
+                        .filter(|v| v.data.name.data.starts_with(&query.data))
+                        .map(|v| v.data.name.data.to_string()),
+                );
+
+                features
+                    .into_iter()
+                    .map(|v| CompletionItem {
+                        label: v,
+                        ..Default::default()
+                    })
+                    .collect::<Vec<_>>()
+            }
+            FeatureArgKind::DependencyFeature {
+                dependency,
+                feature,
+            } => {
+                let crate_name = dependency
+                    .data
+                    .strip_suffix("?")
+                    .unwrap_or(&dependency.data);
+                if let Some(v) = toml
+                    .positioned_info
+                    .dependencies
+                    .iter()
+                    .find(|v| v.data.name.data.as_str() == crate_name)
+                {
+                    let v = self
+                        .crates
+                        .read()
+                        .await
+                        .get_features(crate_name, &v.data.source.version()?.data, &feature.data)
+                        .await?;
+                    v.into_iter()
+                        .map(|v| CompletionItem {
+                            label: v.to_string(),
+                            ..Default::default()
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                }
+            }
+            FeatureArgKind::Dependency(query) => toml
+                .positioned_info
+                .dependencies
+                .iter()
+                .filter(|v| v.data.name.data.starts_with(&query.data))
+                .map(|v| CompletionItem {
+                    label: v.data.name.data.to_string(),
+                    ..Default::default()
+                })
+                .collect::<Vec<_>>(),
+        };
+        Some(out)
     }
 
     async fn name_completion(

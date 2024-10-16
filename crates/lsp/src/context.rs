@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate_info::shared::CrateLookUp;
 use parser::{
-    structure::{CargoRawData, Dependency, Lock, Positioned, RustVersion},
+    structure::{CargoRawData, Dependency, Feature, Lock, Positioned, RustVersion},
     Cargo,
 };
 use tower_lsp::{
@@ -145,6 +145,17 @@ impl Toml {
             Toml::Cargo { cargo, .. } => cargo
                 .positioned_info
                 .dependencies
+                .iter()
+                .find(|v| v.contains_inclusive(byte_offset)),
+            _ => None,
+        }
+    }
+
+    pub fn get_feature(&self, byte_offset: u32) -> Option<&Positioned<Feature>> {
+        match self {
+            Toml::Cargo { cargo, .. } => cargo
+                .positioned_info
+                .features
                 .iter()
                 .find(|v| v.contains_inclusive(byte_offset)),
             _ => None,

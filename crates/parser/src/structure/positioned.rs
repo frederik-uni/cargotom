@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, fmt::Display, sync::Arc};
 
 use super::RangeExclusive;
 
@@ -304,6 +304,41 @@ pub enum FeatureArgKind {
     },
     /// "dep:crate"
     Dependency(Positioned<String>),
+}
+
+impl FeatureArgKind {
+    pub fn range(&self) -> RangeExclusive {
+        match self {
+            FeatureArgKind::CrateFeature(v) => RangeExclusive {
+                start: v.start,
+                end: v.end,
+            },
+            FeatureArgKind::DependencyFeature {
+                dependency,
+                feature,
+            } => RangeExclusive {
+                start: dependency.start,
+                end: feature.end,
+            },
+            FeatureArgKind::Dependency(v) => RangeExclusive {
+                start: v.start,
+                end: v.end,
+            },
+        }
+    }
+}
+
+impl Display for FeatureArgKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FeatureArgKind::CrateFeature(v) => write!(f, "{}", v.data),
+            FeatureArgKind::DependencyFeature {
+                dependency,
+                feature,
+            } => write!(f, "{}/{}", dependency.data, feature.data),
+            FeatureArgKind::Dependency(v) => write!(f, "dep:{}", v.data),
+        }
+    }
 }
 
 impl From<Positioned<String>> for FeatureArgKind {
