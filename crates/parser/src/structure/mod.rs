@@ -18,8 +18,9 @@ pub use version::RustVersion;
 
 pub use info::Workspace;
 pub use raw::CargoRawData;
+pub use raw::Indent;
 pub(crate) use raw::Key;
-pub(crate) use raw::RangeExclusive;
+pub use raw::RangeExclusive;
 pub(crate) use raw::Tree;
 pub(crate) use raw::TreeValue;
 pub(crate) use raw::Value;

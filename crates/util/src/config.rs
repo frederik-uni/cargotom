@@ -14,6 +14,8 @@ pub struct Config {
     pub daemon_port: u16,
     #[serde(default)]
     pub hide_docs_info_message: bool,
+    #[serde(default)]
+    pub sort: bool,
 }
 
 impl Default for Config {
@@ -25,6 +27,7 @@ impl Default for Config {
             daemon: true,
             daemon_port: 54219,
             hide_docs_info_message: false,
+            sort: false,
         }
     }
 }

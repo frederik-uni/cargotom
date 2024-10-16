@@ -1,4 +1,8 @@
+use std::fmt::Display;
+
+use difference::Difference;
 use serde::{Deserialize, Serialize};
+use taplo::formatter::Options;
 
 use crate::util::str_to_positioned;
 
@@ -12,10 +16,97 @@ pub struct CargoRawData {
     pub(crate) tree: Tree,
 }
 
+pub enum Indent {
+    Spaces(u32),
+    Tab,
+}
+
+impl Display for Indent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Indent::Spaces(count) => write!(f, "{}", vec![" "; *count as usize].join("")),
+            Indent::Tab => write!(f, "\t"),
+        }
+    }
+}
+
 impl CargoRawData {
     pub fn text(&self) -> &str {
         &self.string
     }
+
+    pub fn format(
+        &self,
+        sort: bool,
+        trailing_new_line: bool,
+        indent: Indent,
+    ) -> Vec<(RangeExclusive, String)> {
+        let crlf = self.string.contains("\r\n");
+        let mut new = taplo::formatter::format(
+            &self.string,
+            Options {
+                // align_entries: todo!(),
+                // align_comments: todo!(),
+                // align_single_comments: todo!(),
+                // array_trailing_comma: true,
+                // array_auto_expand: true,
+                // inline_table_expand: todo!(),
+                // array_auto_collapse: true,
+                // compact_arrays: todo!(),
+                // compact_inline_tables: todo!(),
+                // compact_entries: todo!(),
+                // column_width: todo!(),
+                // indent_tables: todo!(),
+                // indent_entries: todo!(),
+                indent_string: indent.to_string(),
+                trailing_newline: trailing_new_line,
+                reorder_keys: sort,
+                reorder_arrays: sort,
+                allowed_blank_lines: 2,
+                crlf,
+                ..Default::default()
+            },
+        );
+
+        let changeset = difference::Changeset::new(&self.string, &new, "");
+        let mut differences = Vec::new();
+        let mut left_offset_bytes = 0;
+
+        for diff in changeset.diffs {
+            match diff {
+                Difference::Same(ref s) => {
+                    left_offset_bytes += s.len();
+                }
+                Difference::Add(ref s) => {
+                    differences.push((
+                        RangeExclusive {
+                            start: left_offset_bytes as u32,
+                            end: left_offset_bytes as u32,
+                        },
+                        s.to_string(),
+                    ));
+                }
+                Difference::Rem(ref s) => {
+                    differences.push((
+                        RangeExclusive {
+                            start: left_offset_bytes as u32,
+                            end: (left_offset_bytes + s.len()) as u32,
+                        },
+                        String::new(),
+                    ));
+                    left_offset_bytes += s.len();
+                }
+            }
+        }
+        vec![(
+            RangeExclusive {
+                start: 0,
+                end: u32::MAX,
+            },
+            new,
+        )]
+    }
+
     pub fn text_mut(&mut self) -> &mut String {
         &mut self.string
     }

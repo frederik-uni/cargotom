@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate_info::shared::CrateLookUp;
 use parser::{
-    structure::{CargoRawData, Dependency, Feature, Lock, Positioned, RustVersion},
+    structure::{CargoRawData, Dependency, Feature, Lock, Positioned, RangeExclusive, RustVersion},
     Cargo,
 };
 use tower_lsp::{
@@ -19,6 +19,7 @@ pub struct Context {
     pub workspace_root: Shared<Option<PathBuf>>,
     pub path: PathBuf,
     pub hide_docs_info_message: Shared<bool>,
+    pub sort: Shared<bool>,
     pub toml_store: Shared<HashMap<String, Toml>>,
 }
 
@@ -41,9 +42,22 @@ impl Toml {
         Range { start, end }
     }
 
+    pub fn to_range2(&self, pos: &RangeExclusive) -> Range {
+        let start = self.byte_offset_to_position(pos.start);
+        let end = self.byte_offset_to_position(pos.end);
+        Range { start, end }
+    }
+
     pub fn as_cargo(&self) -> Option<&Cargo> {
         match self {
             Toml::Cargo { cargo, .. } => Some(cargo),
+            _ => None,
+        }
+    }
+
+    pub fn as_raw(&self) -> Option<&CargoRawData> {
+        match self {
+            Toml::Cargo { raw, .. } => Some(raw),
             _ => None,
         }
     }
@@ -175,8 +189,8 @@ impl Toml {
 
     pub fn byte_offset_to_position(&self, byte_offset: u32) -> Position {
         let byte_offset = byte_offset as usize;
-
-        let content_slice = &self.text()[..byte_offset];
+        let text = &self.text();
+        let content_slice = &text[..byte_offset.min(text.len())];
 
         let line = content_slice.chars().filter(|&c| c == '\n').count() as u32;
 

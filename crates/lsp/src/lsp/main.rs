@@ -10,8 +10,9 @@ use tower_lsp::{
     lsp_types::{
         CodeActionParams, CodeActionResponse, CompletionParams, CompletionResponse,
         DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-        ExecuteCommandParams, Hover, HoverParams, InitializeParams, InitializeResult,
-        InitializedParams, InlayHint, InlayHintParams, MessageType, Url,
+        DocumentFormattingParams, ExecuteCommandParams, Hover, HoverParams, InitializeParams,
+        InitializeResult, InitializedParams, InlayHint, InlayHintParams, MessageType, TextEdit,
+        Url,
     },
     LanguageServer, LspService, Server,
 };
@@ -48,6 +49,13 @@ impl LanguageServer for Context {
             return Ok(None);
         }
         match self.code_action_(params).await {
+            Some(v) => v,
+            None => Ok(None),
+        }
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        match self.formatting_(params).await {
             Some(v) => v,
             None => Ok(None),
         }
@@ -198,6 +206,7 @@ pub async fn main(path: PathBuf) {
         path,
         workspace_root: shared(None),
         hide_docs_info_message: shared(false),
+        sort: shared(false),
     })
     .finish();
 

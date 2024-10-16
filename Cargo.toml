@@ -3,10 +3,9 @@ version = "1.0.0"
 edition = "2021"
 
 [workspace]
-members = [ "crates/crate_info", "crates/lsp","crates/parser", "crates/util"]
+members = ["crates/crate_info", "crates/lsp", "crates/parser", "crates/util"]
 defailt-members = ["crates/lsp"]
 resolver = "2"
-
 
 [workspace.dependencies]
 serde = "1.0.210"

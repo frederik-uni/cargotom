@@ -187,10 +187,13 @@ impl Context {
     pub async fn initialize_(&self, params: InitializeParams) -> Result<InitializeResult> {
         let config = load_config(&params);
         *self.hide_docs_info_message.write().await = config.hide_docs_info_message;
+        *self.sort.write().await = config.sort;
+
         self.deamon_update(config).await;
         self.init_cache(&params).await;
         let capabilities = ServerCapabilities {
             inlay_hint_provider: Some(OneOf::Left(true)),
+            document_formatting_provider: Some(OneOf::Left(true)),
             code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             text_document_sync: Some(TextDocumentSyncCapability::Options(
