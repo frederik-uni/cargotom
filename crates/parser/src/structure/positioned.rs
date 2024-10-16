@@ -42,7 +42,7 @@ pub struct Dependency {
     /// Source of the dependency
     pub source: Source,
     /// Enable features for this dependency
-    pub(crate) features: Vec<Positioned<String>>,
+    pub features: Vec<Positioned<String>>,
     pub(crate) features_key_range: Option<RangeExclusive>,
     pub(crate) default_features: Option<Positioned<bool>>,
     /// Keys that are being typed

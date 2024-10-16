@@ -57,9 +57,9 @@
   - [x] dependencies features `serde?/derive`
 
 ### Diagnostics
-- [ ] check if crate needs update
-- [ ] check if crate version exists
-- [ ] check if crate features exist
+- [x] check if crate needs update
+- [x] check if crate version exists
+- [x] check if crate features exist
 - [ ] check if optional dependencies are used(features)
 - [ ] check if version is set & dep in workspace
 - [ ] check for feature duplicate

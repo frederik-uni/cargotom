@@ -165,6 +165,12 @@ pub struct RangeExclusive {
 }
 
 impl RangeExclusive {
+    pub fn new(start: u32, end: u32) -> Self {
+        Self { start, end }
+    }
+}
+
+impl RangeExclusive {
     pub fn contains_inclusive(&self, pos: u32) -> bool {
         self.start <= pos && pos <= self.end
     }
