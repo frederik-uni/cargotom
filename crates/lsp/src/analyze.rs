@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
 use parser::structure::{RangeExclusive, RustVersion};
-use tower_lsp::lsp_types::{self, Diagnostic, DiagnosticSeverity, Range, Url};
+use tower_lsp::lsp_types::{self, Diagnostic, DiagnosticSeverity, MessageType, Range, Url};
 
 use crate::context::Context;
 
+#[derive(Debug)]
 enum RangeExclusiveOrRange {
     Range(Range),
     RangeExclusive(RangeExclusive),
@@ -74,9 +75,9 @@ impl Context {
                 if let Some(version) = dependency.data.source.version() {
                     match max_version_map.get(&&dependency.data.name.data) {
                         Some(new) => {
-                            let newer_version = RustVersion::try_from(version.data.as_str())
+                            let newer_version = !RustVersion::try_from(version.data.as_str())
                                 .map(|v| new > &v)
-                                .unwrap_or(true);
+                                .unwrap_or_default();
                             if newer_version {
                                 issues.entry(uri).or_default().push((
                                     RangeExclusive::new(version.start, version.end).into(),
@@ -118,6 +119,9 @@ impl Context {
                 }
             }
         }
+        self.client
+            .log_message(MessageType::INFO, format!("{:#?}", issues))
+            .await;
         for (uri, issues) in issues {
             let toml = self.toml_store.read().await;
             let toml = match toml.get(uri) {
