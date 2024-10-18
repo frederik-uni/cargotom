@@ -75,7 +75,7 @@ impl Context {
                 if let Some(version) = dependency.data.source.version() {
                     match max_version_map.get(&&dependency.data.name.data) {
                         Some(new) => {
-                            let newer_version = !RustVersion::try_from(version.data.as_str())
+                            let newer_version = RustVersion::try_from(version.data.as_str())
                                 .map(|v| new > &v)
                                 .unwrap_or_default();
                             if newer_version {

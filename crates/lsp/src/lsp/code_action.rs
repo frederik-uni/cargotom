@@ -133,7 +133,8 @@ impl Context {
             actions.push(CodeActionOrCommand::CodeAction(action));
             let update = toml.needs_update(&self.crates).await.unwrap_or_default();
             if !update.is_empty() {
-                if let Some((range, new)) = update.iter().find(|(name, _)| &name.data == crate_name)
+                if let Some((_, range, new)) =
+                    update.iter().find(|(name, _, _)| &name.data == crate_name)
                 {
                     let mut start = toml.byte_offset_to_position(range.start);
                     start.character += 1;
@@ -150,7 +151,7 @@ impl Context {
                 }
                 let changes = update
                     .into_iter()
-                    .map(|(range, new)| {
+                    .map(|(_, range, new)| {
                         let mut start = toml.byte_offset_to_position(range.start);
                         start.character += 1;
                         let mut end = toml.byte_offset_to_position(range.end);

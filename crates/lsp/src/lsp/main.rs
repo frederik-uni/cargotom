@@ -81,7 +81,7 @@ impl LanguageServer for Context {
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        if !uri.to_string().ends_with("/Cargo.toml") || uri.to_string().ends_with("Cargo.lock") {
+        if !uri.to_string().ends_with("/Cargo.toml") || uri.to_string().ends_with("/Cargo.lock") {
             return;
         }
         let (members, lock_file) = if let Some(v) = self.toml_store.write().await.get_mut(&uri) {
@@ -100,7 +100,7 @@ impl LanguageServer for Context {
             self.open_files(members, lock_file, Workspace::module(v))
                 .await;
         }
-        let diagnostics = self.analyze(&uri).await;
+        self.analyze(&uri).await;
         let _ = self.client.inlay_hint_refresh().await;
     }
 
@@ -181,7 +181,7 @@ impl LanguageServer for Context {
                 self.open_files(members, lock_file, Workspace::module(path))
                     .await;
             }
-            let diagnostics = self.analyze(&uri).await;
+            self.analyze(&uri).await;
         }
     }
 

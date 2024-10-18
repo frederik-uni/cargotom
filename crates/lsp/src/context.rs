@@ -79,7 +79,7 @@ impl Toml {
     pub async fn needs_update(
         &self,
         lookup: &Shared<CrateLookUp>,
-    ) -> Option<Vec<(&Positioned<String>, String)>> {
+    ) -> Option<Vec<(&Positioned<String>, &Positioned<String>, String)>> {
         let mut updates = vec![];
         let items = self
             .as_cargo()?
@@ -109,7 +109,7 @@ impl Toml {
                 .collect::<Vec<_>>();
             versions.sort();
             if let Some(v) = versions.pop() {
-                updates.push((crate_name, v.to_string()));
+                updates.push((crate_name, version, v.to_string()));
             }
         }
         Some(updates)
