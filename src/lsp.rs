@@ -46,8 +46,8 @@ fn start_daemon(port: u16, storage: &Path, stable: bool, offline: bool, per_page
         args.push("--offline".to_string());
     }
 
-    // let current_exe = std::env::current_exe().expect("Failed to get current executable path");
-    let current_exe = "/Users/frederik/.cargo/target/debug/cargotom";
+    let current_exe = std::env::current_exe().expect("Failed to get current executable path");
+    // let current_exe = "/Users/frederik/.cargo/target/debug/cargotom";
 
     // Spawn a new process with the current executable and the arguments
     let v = std::process::Command::new(current_exe).args(&args).spawn();
