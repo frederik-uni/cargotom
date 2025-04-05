@@ -13,5 +13,5 @@ glob = { workspace = true }
 proctitle = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-std"] }
 tower-lsp = "0.20.0"
-clap = { version = "4.5.20", features = ["derive"] }
-webbrowser = "0.8.15"
+clap = { version = "4.5.35", features = ["derive"] }
+webbrowser = "1.0.4"
