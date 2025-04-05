@@ -3,7 +3,12 @@ version = "1.0.0"
 edition = "2021"
 
 [workspace]
-members = [ "crates/cargotom", "crates/info-provider", "crates/lsp","crates/parser"]
+members = [
+    "crates/cargotom",
+    "crates/info-provider",
+    "crates/lsp",
+    "crates/parser",
+]
 exclude = ["zed-cargotom"]
 default-members = ["crates/cargotom"]
 resolver = "2"

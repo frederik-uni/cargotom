@@ -2,15 +2,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use info_provider::api::InfoProvider;
-use parser::Db;
+use parser::{Db, Indent};
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, MessageType,
-    ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, Url,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
+    ExecuteCommandParams, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
+    SignatureHelpOptions, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextEdit, Url,
 };
 use tower_lsp::{
     async_trait,
@@ -22,6 +23,7 @@ pub struct Context {
     pub client: Client,
     db: Arc<RwLock<Db>>,
     info: Arc<InfoProvider>,
+    sort: bool,
 }
 
 macro_rules! crate_version {
@@ -82,7 +84,7 @@ impl LanguageServer for Context {
                 workspace_symbol_provider: None,
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 code_lens_provider: None,
-                document_formatting_provider: None,
+                document_formatting_provider: Some(OneOf::Left(true)),
                 document_range_formatting_provider: None,
                 document_on_type_formatting_provider: None,
                 rename_provider: None,
@@ -329,6 +331,31 @@ impl LanguageServer for Context {
         }
         Ok(None)
     }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let temp = self.db.read().await;
+        let data = temp
+            .format(
+                &params.text_document.uri,
+                self.sort,
+                params.options.insert_final_newline.unwrap_or(true),
+                match params.options.insert_spaces {
+                    true => Indent::Spaces(params.options.tab_size),
+                    false => Indent::Tab,
+                },
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(range, text)| TextEdit {
+                range: Range::new(
+                    Position::new(range.0 .0 as u32, range.0 .1 as u32),
+                    Position::new(range.1 .0 as u32, range.1 .1 as u32),
+                ),
+                new_text: text,
+            })
+            .collect();
+        Ok(Some(data))
+    }
 }
 
 pub async fn main(path: PathBuf) {
@@ -339,6 +366,7 @@ pub async fn main(path: PathBuf) {
         client,
         db: Default::default(),
         info: Arc::new(InfoProvider::new(50)),
+        sort: false,
     })
     .finish();
 

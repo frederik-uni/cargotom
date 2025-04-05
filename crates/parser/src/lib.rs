@@ -1,3 +1,4 @@
+mod format;
 pub mod structs;
 pub mod toml;
 pub mod tree;
@@ -22,7 +23,15 @@ pub struct Db {
     locks: HashMap<Uri, CargoLockRaw>,
 }
 
+pub enum Indent {
+    Spaces(u32),
+    Tab,
+}
+
 impl Db {
+    pub fn get_content(&self, uri: &Uri) -> Option<String> {
+        Some(self.files.get(uri)?.to_string())
+    }
     pub fn get_line(&self, uri: &Uri, bytes_offset: usize) -> Option<usize> {
         if let Some(v) = self.files.get(uri) {
             let line_index = v.byte_to_line(bytes_offset);
@@ -37,6 +46,26 @@ impl Db {
 
     pub fn get_toml(&self, uri: &Uri) -> Option<&Toml> {
         self.tomls.get(uri)
+    }
+
+    pub fn get_last_line_and_char(&self, uri: &Uri) -> Option<(usize, usize)> {
+        if let Some(v) = self.files.get(uri) {
+            let total_chars = v.len_chars();
+
+            if total_chars == 0 {
+                return Some((0, 0));
+            }
+
+            let last_line_index = v.len_lines() - 1;
+
+            let last_line_start_char = v.line_to_char(last_line_index);
+
+            let chars_in_last_rows = total_chars - last_line_start_char;
+
+            Some((last_line_index, chars_in_last_rows))
+        } else {
+            None
+        }
     }
 
     pub fn get_offset(&self, uri: &Uri, byte_offset: usize) -> Option<(usize, usize)> {

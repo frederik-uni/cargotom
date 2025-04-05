@@ -10,3 +10,4 @@ toml.workspace = true
 serde_json.workspace = true
 taplo.workspace = true
 url.workspace = true
+difference = "2.0.0"
