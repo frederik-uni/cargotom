@@ -169,6 +169,18 @@ impl LanguageServer for Context {
             return Ok(None);
         }
         let mut actions = vec![];
+
+        let mut actions_last = vec![CodeActionOrCommand::CodeAction(CodeAction {
+            title: "Update All".to_string(),
+            kind: Some(CodeActionKind::EMPTY),
+            command: Some(Command {
+                title: "Update All".to_string(),
+                command: "cargo-update".to_string(),
+                arguments: None,
+            }),
+            ..CodeAction::default()
+        })];
+
         let uri = params.text_document.uri;
 
         if params.range.start.line == 0 || params.range.end.line == 0 {
@@ -186,11 +198,7 @@ impl LanguageServer for Context {
                 params.range.end.character as usize,
             ),
         ) {
-            if let Some(a) = self.dep_actions(&uri, dep, &lock) {
-                actions.extend(a.into_iter().map(CodeActionOrCommand::CodeAction));
-            }
             if let parser::toml::DepSource::Version { value, registry } = &dep.data.source {
-                //TODO: check up to date
                 let version_info = self
                     .info
                     .get_info(
@@ -198,20 +206,12 @@ impl LanguageServer for Context {
                         &dep.data.name.data,
                     )
                     .await;
-                self.client.log_message(MessageType::INFO, "version").await;
                 match version_info {
                     Ok(data) => {
                         if let Some(last) = data.last() {
-                            self.client
-                                .log_message(MessageType::INFO, "foind root")
-                                .await;
-
                             if let Some(upgrade_dep) =
                                 self.upgrade_dep(&uri, &value.value, last.ver(), &lock)
                             {
-                                self.client
-                                    .log_message(MessageType::INFO, "foind pushed")
-                                    .await;
                                 actions.push(CodeActionOrCommand::CodeAction(upgrade_dep));
                             }
                         }
@@ -233,7 +233,7 @@ impl LanguageServer for Context {
                     }),
                     ..CodeAction::default()
                 };
-                actions.push(CodeActionOrCommand::CodeAction(action));
+                actions_last.push(CodeActionOrCommand::CodeAction(action));
                 let action = CodeAction {
                     title: "Open Source".to_string(),
                     kind: Some(CodeActionKind::EMPTY),
@@ -247,7 +247,7 @@ impl LanguageServer for Context {
                     }),
                     ..CodeAction::default()
                 };
-                actions.push(CodeActionOrCommand::CodeAction(action));
+                actions_last.push(CodeActionOrCommand::CodeAction(action));
                 let action = CodeAction {
                     title: "Open crates.io".to_string(),
                     kind: Some(CodeActionKind::EMPTY),
@@ -260,9 +260,14 @@ impl LanguageServer for Context {
                     }),
                     ..CodeAction::default()
                 };
-                actions.push(CodeActionOrCommand::CodeAction(action));
+                actions_last.push(CodeActionOrCommand::CodeAction(action));
+            }
+            if let Some(a) = self.dep_actions(&uri, dep, &lock) {
+                actions.extend(a.into_iter().map(CodeActionOrCommand::CodeAction));
             }
         }
+
+        actions.extend(actions_last);
         Ok(Some(actions))
     }
 

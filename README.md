@@ -27,7 +27,7 @@
 - [x] "Open crates.io" => opens crates.io/...
 - [x] "Open Src code" => opens src code on github
 - [x] "Upgrade" => will upgrade the dependency version to the latest version
-- [ ] "Upgrade All" => will upgrade every dependency version to the latest version
+- [x] "Upgrade All" => will upgrade every dependency version to the latest version
 - [ ] "Update All" => will run `cargo run`
 - [x] toggle optional dependency
 - [ ] make dependency optional if in feature
