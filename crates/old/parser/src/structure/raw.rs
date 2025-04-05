@@ -176,25 +176,6 @@ impl RangeExclusive {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Value {
-    Tree {
-        value: Tree,
-        range: RangeExclusive,
-    },
-    NoContent,
-    Array(Vec<Value>),
-    String {
-        value: String,
-        range: RangeExclusive,
-    },
-    Bool {
-        value: bool,
-        range: RangeExclusive,
-    },
-    Unknown,
-}
-
 impl Value {
     pub fn as_str(&self) -> Option<Positioned<String>> {
         match self {

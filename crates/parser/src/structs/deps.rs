@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::util::str_to_positioned;
-
-use super::structure::{
-    Dependency, DependencyKind, OptionalKey, Positioned, Source, Target, Value, WithKey,
+use crate::{
+    toml::{DepSource, Dependency, DependencyKind, OptionalKey, Positioned, Target, WithKey},
+    tree::{str_to_positioned, Value},
+    Tree,
 };
 
 pub fn get_dependencies(
@@ -13,12 +13,13 @@ pub fn get_dependencies(
 ) -> Option<Vec<Positioned<Dependency>>> {
     let tree = value.as_tree()?;
     let mut out = vec![];
-    for dep_tree in tree.0.iter() {
+    for dep_tree in tree.nodes.iter() {
         let name = dep_tree.key.to_positioned();
         let mut dep = Dependency {
             name,
             kind,
-            source: Source::None,
+            expanded: true,
+            source: DepSource::None,
             features: vec![],
             optional: None,
             target: targets.clone(),
@@ -31,10 +32,11 @@ pub fn get_dependencies(
                 dependency_tree_format_parser(value, &mut dep);
             }
             Value::String { value, range } => {
-                dep.source = Source::Version {
+                dep.source = DepSource::Version {
                     value: OptionalKey::no_key(str_to_positioned(value, range)),
                     registry: None,
                 };
+                dep.expanded = false;
             }
             Value::NoContent => {}
             _ => continue,
@@ -49,8 +51,8 @@ pub fn get_dependencies(
     Some(out)
 }
 
-fn dependency_tree_format_parser(value: &super::structure::Tree, dep: &mut Dependency) {
-    for tree_value in value.0.iter() {
+fn dependency_tree_format_parser(value: &Tree, dep: &mut Dependency) {
+    for tree_value in value.nodes.iter() {
         match tree_value.key.value.as_str() {
             "version" => match tree_value.value.as_str() {
                 Some(value) => dep

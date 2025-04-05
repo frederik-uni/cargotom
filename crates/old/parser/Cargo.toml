@@ -1,12 +1,12 @@
 [package]
 name = "parser"
-version.workspace = true
-edition.workspace = true
+version = "0.1.0"
+edition = "2021"
 
 [dependencies]
-ropey = "1.6.1"
+url = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true }
 serde_json = { workspace = true }
 taplo = { workspace = true }
-url = {workspace = true}
+difference = "2.0.0"

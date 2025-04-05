@@ -1,17 +1,12 @@
 [package]
-name = "cargotom"
+name = "lsp"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-parser = { workspace = true }
-util = { workspace = true }
-crate_info = { workspace = true }
-serde_json = { workspace = true }
-tcp-struct = { workspace = true }
-glob = { workspace = true }
-proctitle = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-std"] }
 tower-lsp = "0.20.0"
-clap = { version = "4.5.20", features = ["derive"] }
+tokio = { workspace = true, features=["io-std"] }
+parser = {workspace = true}
+serde_json = { workspace = true }
 webbrowser = "0.8.15"
+info-provider = { workspace = true}
