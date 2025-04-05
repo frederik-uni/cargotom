@@ -61,7 +61,7 @@ impl Db {
         }
         for toml in &toml.dependencies {
             let src = if let DepSource::Workspace(range) = &toml.data.source {
-                workspace.and_then(|v| {
+                workspace.as_ref().and_then(|v| {
                     v.dependencies
                         .iter()
                         .find(|v| v.data.name.data == toml.data.name.data)
