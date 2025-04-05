@@ -22,7 +22,7 @@ pub fn get_dependencies(
             kind,
             expanded: true,
             source: DepSource::None,
-            features: vec![],
+            features: Positioned::new(0, 0, vec![]),
             optional: None,
             target: targets.clone(),
             default_features: None,
@@ -111,17 +111,20 @@ fn dependency_tree_format_parser(value: &Tree, dep: &mut Dependency) {
                     .set_rev(WithKey::new(tree_value.key.range, value)),
                 None => continue,
             },
-            "features" => match tree_value.value.as_array() {
-                Some(value) => {
+            "features" => match &tree_value.value {
+                Value::Array { value, range } => {
+                    let range = tree_value.pos.join(&range);
+                    dep.features.start = range.start;
+                    dep.features.end = range.end;
                     dep.features_key_range = Some(tree_value.key.range);
                     for feature in value.iter() {
                         let feature = feature.as_str();
                         if let Some(feature) = feature {
-                            dep.features.push(feature);
+                            dep.features.data.push(feature);
                         }
                     }
                 }
-                None => {
+                _ => {
                     dep.features_key_range = Some(tree_value.key.range);
                     continue;
                 }

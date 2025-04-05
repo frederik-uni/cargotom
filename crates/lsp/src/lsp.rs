@@ -9,9 +9,10 @@ use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
-    ExecuteCommandParams, InlayHint, InlayHintKind, InlayHintParams, MessageType, OneOf, Position,
-    Range, ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url,
+    ExecuteCommandParams, Hover, HoverParams, HoverProviderCapability, InlayHint, InlayHintKind,
+    InlayHintParams, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
+    SignatureHelpOptions, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextEdit, Url,
 };
 use tower_lsp::{
     async_trait,
@@ -22,7 +23,7 @@ use tower_lsp::{
 pub struct Context {
     pub client: Client,
     db: Arc<RwLock<Db>>,
-    info: Arc<InfoProvider>,
+    pub info: Arc<InfoProvider>,
     sort: bool,
 }
 
@@ -80,7 +81,7 @@ impl LanguageServer for Context {
                 }),
                 position_encoding: None,
                 selection_range_provider: None,
-                hover_provider: None,
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: None,
                 type_definition_provider: None,
                 implementation_provider: None,
@@ -426,6 +427,29 @@ impl LanguageServer for Context {
             .log_message(MessageType::INFO, "aquired read lock code_action")
             .await;
         Ok(Some(v))
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        if !self.shoud_allow_user(&uri) {
+            return Ok(None);
+        }
+        self.client
+            .log_message(MessageType::INFO, "aquire read lock code_action")
+            .await;
+        let lock = self.db.read().await;
+        self.client
+            .log_message(MessageType::INFO, "aquired read lock code_action")
+            .await;
+
+        if let Some(h) = self
+            .hover_dep(&uri, params.text_document_position_params.position, &lock)
+            .await
+        {
+            return Ok(Some(h));
+        }
+
+        Ok(None)
     }
 }
 

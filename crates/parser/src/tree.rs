@@ -45,7 +45,10 @@ pub(crate) enum Value {
         range: RangeExclusive,
     },
     NoContent,
-    Array(Vec<Value>),
+    Array {
+        value: Vec<Value>,
+        range: RangeExclusive,
+    },
     String {
         value: String,
         range: RangeExclusive,
@@ -63,9 +66,31 @@ pub struct RangeExclusive {
     pub end: u32,
 }
 
+impl<T> From<Positioned<T>> for RangeExclusive {
+    fn from(value: Positioned<T>) -> Self {
+        Self {
+            start: value.start,
+            end: value.end,
+        }
+    }
+}
+
+impl<T> From<&Positioned<T>> for RangeExclusive {
+    fn from(value: &Positioned<T>) -> Self {
+        Self {
+            start: value.start,
+            end: value.end,
+        }
+    }
+}
+
 impl RangeExclusive {
     pub fn new(start: u32, end: u32) -> Self {
         Self { start, end }
+    }
+
+    pub fn contains(&self, offset: usize) -> bool {
+        self.start <= offset as u32 && offset as u32 <= self.end
     }
 
     pub fn join(&self, other: &RangeExclusive) -> Self {
@@ -124,9 +149,14 @@ impl From<&Node> for Value {
                 }
                 .into(),
             },
-            taplo::dom::Node::Array(arr) => {
-                Value::Array(arr.items().get().iter().map(Self::from).collect())
-            }
+            taplo::dom::Node::Array(arr) => Value::Array {
+                value: arr.items().get().iter().map(Self::from).collect(),
+                range: match arr.inner.syntax.as_ref().unwrap() {
+                    taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
+                    taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
+                }
+                .into(),
+            },
             taplo::dom::Node::Bool(b) => Value::Bool {
                 value: b.value(),
                 range: match b.inner.syntax.as_ref().unwrap() {
@@ -204,7 +234,7 @@ impl Value {
         match self {
             Value::Tree { .. } => None,
             Value::NoContent => None,
-            Value::Array(_) => None,
+            Value::Array { .. } => None,
             Value::String { value, range } => Some(str_to_positioned(value, range)),
             Value::Bool { .. } => None,
             Value::Unknown => None,
@@ -214,7 +244,7 @@ impl Value {
         match self {
             Value::Tree { value, .. } => Some(value),
             Value::NoContent => None,
-            Value::Array(_) => None,
+            Value::Array { .. } => None,
             Value::String { .. } => None,
             Value::Bool { .. } => None,
             Value::Unknown => None,
@@ -225,7 +255,7 @@ impl Value {
         match self {
             Value::Tree { .. } => None,
             Value::NoContent => None,
-            Value::Array(value) => Some(value),
+            Value::Array { value, .. } => Some(value),
             Value::String { .. } => None,
             Value::Bool { .. } => None,
             Value::Unknown => None,
@@ -236,7 +266,7 @@ impl Value {
         match self {
             Value::Tree { .. } => None,
             Value::NoContent => None,
-            Value::Array(_) => None,
+            Value::Array { .. } => None,
             Value::String { .. } => None,
             Value::Bool { value, range } => Some(Positioned {
                 start: range.start,
@@ -268,7 +298,7 @@ impl Value {
                 })
             }
             Value::NoContent => None,
-            Value::Array(_) => None,
+            Value::Array { .. } => None,
             Value::String { range, .. } => Some(*range),
             Value::Bool { range, .. } => Some(*range),
             Value::Unknown => None,

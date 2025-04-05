@@ -42,6 +42,11 @@ impl<T> Positioned<T> {
     pub fn new(start: u32, end: u32, data: T) -> Self {
         Self { start, end, data }
     }
+
+    pub fn contains(&self, offset: usize) -> bool {
+        self.start <= offset as u32 && offset as u32 <= self.end
+    }
+
     pub fn overlap(&self, range: RangeExclusive) -> bool {
         range.start <= self.end && range.end >= self.start
     }
@@ -66,7 +71,7 @@ pub struct Dependency {
     /// Source of the dependency
     pub source: DepSource,
     /// Enable features for this dependency
-    pub features: Vec<Positioned<String>>,
+    pub features: Positioned<Vec<Positioned<String>>>,
     pub features_key_range: Option<RangeExclusive>,
     pub default_features: Option<Positioned<bool>>,
     /// Keys that are being typed
@@ -143,10 +148,11 @@ impl Display for Dependency {
                 {
                     items.push(v);
                 }
-                if !self.features.is_empty() {
+                if !self.features.data.is_empty() {
                     items.push(format!(
                         "features = [ {} ]",
                         self.features
+                            .data
                             .iter()
                             .map(|v| v.data.clone())
                             .collect::<Vec<_>>()
@@ -280,6 +286,33 @@ pub enum DepSource {
 }
 
 impl DepSource {
+    pub fn registry(&self) -> Option<&str> {
+        match self {
+            DepSource::Version { registry, .. } => registry.as_ref().map(|v| v.value.data.as_str()),
+            _ => None,
+        }
+    }
+    pub fn range(&self) -> Option<RangeExclusive> {
+        match self {
+            DepSource::Version { value, .. } => {
+                let mut r = RangeExclusive::from(&value.value);
+                if let Some(v) = value.key {
+                    r = r.join(&v)
+                }
+                Some(r)
+            }
+            _ => None,
+        }
+    }
+    pub fn contains(&self, offset: usize) -> bool {
+        match self {
+            DepSource::Version { value, registry } => {
+                value.value.contains(offset)
+                    || value.key.map(|v| v.contains(offset)).unwrap_or_default()
+            }
+            _ => false,
+        }
+    }
     pub fn end(&self) -> Option<u32> {
         match self {
             DepSource::Version { value, .. } => Some(value.value.end),

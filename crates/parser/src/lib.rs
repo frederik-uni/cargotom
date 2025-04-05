@@ -86,6 +86,15 @@ impl Db {
         self.tomls.get(uri)
     }
 
+    pub fn get_byte(&self, uri: &Uri, line: usize, char: usize) -> Option<usize> {
+        if let Some(v) = self.files.get(uri) {
+            let line_chars = v.line_to_char(line);
+            let byte = v.char_to_byte(line_chars + char);
+            return Some(byte);
+        }
+        None
+    }
+
     pub fn get_last_line_and_char(&self, uri: &Uri) -> Option<(usize, usize)> {
         if let Some(v) = self.files.get(uri) {
             let total_chars = v.len_chars();

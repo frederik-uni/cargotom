@@ -11,3 +11,4 @@ tokio = { version = "1", features = ["full"] }
 urlencoding = "2.1"
 anyhow = "1.0"
 parser.workspace = true
+tower-lsp = "0.20"

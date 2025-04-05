@@ -744,6 +744,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tower-lsp",
  "urlencoding",
 ]
 
@@ -1139,9 +1140,9 @@ checksum = "f2ff9a1f06a88b01621b7ae906ef0211290d1c8a168a15542486a8f61c0833b9"
 
 [[package]]
 name = "redox_syscall"
-version = "0.5.10"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b8c0c260b63a8219631167be35e6a988e9554dbd323f8bd08439c8ed1302bd1"
+checksum = "d2f103c6d277498fbceb16e84d317e2a400f160f46904d5f5410848c829511a3"
 dependencies = [
  "bitflags 2.9.0",
 ]
@@ -1560,7 +1561,7 @@ dependencies = [
 [[package]]
 name = "taplo"
 version = "0.13.2"
-source = "git+https://github.com/frederik-uni/taplo#e95852616d37ca14ec79821169fdd141491964e0"
+source = "git+https://github.com/frederik-uni/taplo#3bf3794d47d8e020af1f1528e90cc0bb0a5e93b5"
 dependencies = [
  "ahash",
  "arc-swap",
@@ -1659,9 +1660,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.44.1"
+version = "1.44.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f382da615b842244d4b8738c82ed1275e6c5dd90c459a30941cd07080b06c91a"
+checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
 dependencies = [
  "backtrace",
  "bytes",

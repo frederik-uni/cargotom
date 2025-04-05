@@ -83,7 +83,7 @@ impl Context {
                 name: dep.data.name.clone(),
                 kind: DependencyKind::Normal,
                 source: dep.data.source.clone(),
-                features: Vec::new(),
+                features: Positioned::new(0, 0, Vec::new()),
                 features_key_range: None,
                 default_features: None,
                 typing_keys: Vec::new(),

@@ -9,7 +9,7 @@ pub fn get_features(value: &Value) -> Option<Vec<Positioned<Feature>>> {
     for tree_value in tree.nodes.iter() {
         let name = tree_value.key.to_positioned();
         match &tree_value.value {
-            Value::Array(value) => {
+            Value::Array { value, .. } => {
                 let args = value
                     .iter()
                     .filter_map(|v| v.as_str())

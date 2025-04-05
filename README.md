@@ -1,15 +1,10 @@
 # cargotom
 ## Config
+-todo: view mode features, per_page
 ```json
 "lsp": {
   "cargo-tom": {
     "initialization_options": {
-      "hide_docs_info_message": true,
-      "offline": false,
-      "stable": false,
-      "sort": false,
-      "daemon": true,
-      "per_page_web": 50
     }
   },
   ...
@@ -37,8 +32,8 @@
 - [x] used version in Cargo.lock
 
 ### Hover
-- [ ] available versions
-- [ ] available features
+- [x] available versions
+- [x] available features
 - [ ] crate description
 - [ ] Static
 
@@ -70,5 +65,4 @@
 - [ ] auto close { when content inside
 
 ## Plans
-- resolve workspace = true to version
 - feature suggestions for git dependencies and local dependencies
