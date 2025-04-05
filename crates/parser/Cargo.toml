@@ -12,3 +12,7 @@ taplo.workspace = true
 url.workspace = true
 difference = "2.0.0"
 tower-lsp = "0.20.0"
+info-provider = { workspace = true }
+rust-version.workspace = true
+tokio = { workspace = true, features = ["full"] }
+async-recursion = "1"

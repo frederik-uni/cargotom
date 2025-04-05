@@ -36,6 +36,7 @@ macro_rules! crate_version {
 #[async_trait]
 impl LanguageServer for Context {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        let c = self.db.clone();
         self.client
             .log_message(MessageType::INFO, "aquire write lock init")
             .await;
@@ -43,6 +44,7 @@ impl LanguageServer for Context {
         self.client
             .log_message(MessageType::INFO, "aquired write lock init")
             .await;
+        lock.sel = Some(c);
         for v in params.workspace_folders.unwrap_or_default() {
             let mut root = v.uri;
             if !root.as_str().ends_with('/') {
@@ -456,11 +458,11 @@ impl LanguageServer for Context {
 pub async fn main(path: PathBuf) {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-
+    let info = Arc::new(InfoProvider::new(50));
     let (client, server) = LspService::build(|client| Context {
         client: client.clone(),
-        db: Arc::new(RwLock::new(Db::new(client))),
-        info: Arc::new(InfoProvider::new(50)),
+        db: Db::new(client, info.clone()),
+        info,
         sort: false,
     })
     .finish();

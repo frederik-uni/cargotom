@@ -2,15 +2,13 @@ use std::usize;
 
 use info_provider::api::ViewMode;
 use parser::{
-    structs::version::RustVersion,
     toml::{Dependency, Positioned},
     tree::RangeExclusive,
     Db,
 };
+use rust_version::RustVersion;
 use tokio::sync::RwLockReadGuard;
-use tower_lsp::lsp_types::{
-    Hover, HoverContents, MarkupContent, MarkupKind, MessageType, Position, Range, Url,
-};
+use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Range, Url};
 
 use crate::lsp::Context;
 
@@ -31,12 +29,14 @@ impl Context {
                 .get_info(dep.data.source.registry(), &dep.data.name.data)
                 .await
             {
-                Ok(v) => v
-                    .into_iter()
-                    .map(|v| format!("- {}", v.vers))
-                    .rev()
-                    .collect::<Vec<_>>()
-                    .join("\n"),
+                Ok(v) => format!(
+                    "List of all availanle versions: \n{}",
+                    v.into_iter()
+                        .map(|v| format!("- {}", v.vers))
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ),
                 Err(_) => "Couldnt find version info".to_owned(),
             };
             return Some(Hover {
@@ -105,7 +105,7 @@ impl Context {
         let vers = RustVersion::try_from(
             match &dep.data.source {
                 parser::toml::DepSource::Version { value, registry } => Some(&value.value.data),
-                parser::toml::DepSource::Workspace => {
+                parser::toml::DepSource::Workspace(_) => {
                     let workspace_uri = lock.get_workspace(uri)?;
                     let workspace = lock.get_toml(workspace_uri)?;
                     let w_dep = workspace
@@ -127,20 +127,20 @@ impl Context {
                 .get_info(dep.data.source.registry(), &dep.data.name.data)
                 .await
             {
-                Ok(v) => v
-                    .into_iter()
-                    .rfind(|v|
-                       match &v.ver() {
+                Ok(v) => format!(
+                    "List of all available features: \n{}",
+                    v.into_iter()
+                        .rfind(|v| match &v.ver() {
                             Some(v) => Some(v),
                             None => None,
-                        } == Some(&vers)
-                    )
-                    .map(|v| v.features(ViewMode::UnusedOpt))
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| format!("- {v}"))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
+                        } == Some(&vers))
+                        .map(|v| v.features(ViewMode::UnusedOpt))
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|v| format!("- {v}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ),
                 Err(_) => "Couldnt find feature info".to_owned(),
             };
             return Some(Hover {

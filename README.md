@@ -12,6 +12,7 @@
 ```
 ## Features
 ### Code actions
+- [ ] Add self as dependency
 - [x] Open LSP docs(first line)
 - [x] Open LSP issues(first line)
 - [x] Open Cargo.toml docs(first line)
@@ -26,6 +27,7 @@
 - [x] "Update All" => will run `cargo update`
 - [x] toggle optional dependency
 - [ ] make dependency optional if in feature
+- [ ] fix missing in workspace
 
 
 ### Inlay Hint
@@ -51,14 +53,18 @@
   - [ ] dependencies features `serde?/derive`
 
 ### Diagnostics
-- [ ] check if crate needs update
-- [ ] check if crate version exists
-- [ ] check if crate features exist
-- [ ] check if optional dependencies are used(features)
-- [ ] check if version is set & dep in workspace
-- [ ] check for feature duplicate
-- [ ] check for dep duplicate
-- [ ] check if `dep:crate_name` is optional
+- [ ] Static format
+- [x] Dependencies
+  - [x] check if crate exists
+  - [x] check if crate needs update
+  - [x] check if crate version exists
+  - [x] check if crate features exist
+  - [x] check for feature duplicate
+  - [x] check for dep duplicate
+  - [x] check if version is set & dep in workspace
+- [ ] Features
+  - [ ] check for feature duplicate
+  - [ ] check if `dep:crate_name` is optional
 
 ### Formatter
 - [x] enable taplo formatter

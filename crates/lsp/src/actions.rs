@@ -1,10 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use parser::{
-    structs::version::RustVersion,
     toml::{DepSource, Dependency, DependencyKind, Positioned},
+    tree::RangeExclusive,
     Db,
 };
+use rust_version::RustVersion;
 use tokio::sync::RwLockReadGuard;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, Position, Range, TextEdit, Url, WorkspaceEdit,
@@ -64,7 +65,7 @@ impl Context {
         range: &Range,
         lock: &RwLockReadGuard<Db>,
     ) -> Option<Vec<CodeAction>> {
-        if let DepSource::Workspace = dep.data.source {
+        if let DepSource::Workspace(_) = dep.data.source {
             return None;
         }
         let workspace_uri = lock.get_workspace(uri)?;
@@ -103,7 +104,7 @@ impl Context {
                 });
         }
         let mut data = dep.data.clone();
-        data.source = DepSource::Workspace;
+        data.source = DepSource::Workspace(RangeExclusive::default());
         changes.entry(uri.clone()).or_default().push(TextEdit {
             range: range.clone(),
             new_text: data.to_string(),

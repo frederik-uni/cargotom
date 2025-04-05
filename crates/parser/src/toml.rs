@@ -127,7 +127,7 @@ impl Display for DepSource {
             },
             DepSource::Path(p) => write!(f, "path = \"{}\"", p.value.data),
             DepSource::None => write!(f, "version = \"\""),
-            DepSource::Workspace => write!(f, "workspace = true"),
+            DepSource::Workspace(_) => write!(f, "workspace = true"),
         }
     }
 }
@@ -176,7 +176,7 @@ impl Display for Dependency {
                     write!(f, "{}.path = \"{}\"", &self.name.data, &path.value.data,)
                 }
                 DepSource::None => write!(f, "{}", &self.name.data,),
-                DepSource::Workspace => write!(f, "{}.workspace = true", &self.name.data,),
+                DepSource::Workspace(_) => write!(f, "{}.workspace = true", &self.name.data,),
             },
         }
     }
@@ -282,7 +282,7 @@ pub enum DepSource {
     /// Broken file
     /// for suggestions while typing the name
     None,
-    Workspace,
+    Workspace(RangeExclusive),
 }
 
 impl DepSource {
@@ -301,6 +301,7 @@ impl DepSource {
                 }
                 Some(r)
             }
+            Self::Workspace(r) => Some(r.clone()),
             _ => None,
         }
     }
@@ -327,8 +328,8 @@ impl DepSource {
         }
     }
 
-    pub fn set_workspace(&mut self) {
-        *self = DepSource::Workspace
+    pub fn set_workspace(&mut self, range: RangeExclusive) {
+        *self = DepSource::Workspace(range)
     }
     pub fn set_version(&mut self, key: OptionalKey) {
         match self {

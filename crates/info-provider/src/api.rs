@@ -3,14 +3,21 @@ use std::{
     sync::Arc,
 };
 
-use parser::structs::version::RustVersion;
 use reqwest::{header::USER_AGENT, Client};
+use rust_version::RustVersion;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, Notify};
-use tower_lsp::lsp_types::MessageType;
 
 pub enum CacheItem<T> {
     Pending(Arc<Notify>),
+    Error(String),
+    Ready(Vec<T>),
+}
+
+pub enum CacheItemOut<T> {
+    NotStarted,
+    Pending,
+    Error(String),
     Ready(Vec<T>),
 }
 
@@ -47,13 +54,15 @@ impl InfoProvider {
         json["crate"]["repository"].as_str().map(|s| s.to_string())
     }
 
-    pub async fn get_info_cache(&self, registry: Option<&str>, name: &str) -> Option<Vec<Root1>> {
+    pub async fn get_info_cache(&self, registry: Option<&str>, name: &str) -> CacheItemOut<Root1> {
         let reg = registry.unwrap_or(self.registry);
         let mut lock = self.info_cache.lock().await;
         let cache = lock.entry(reg.to_owned()).or_default();
-        match cache.get(name)? {
-            CacheItem::Pending(_) => None,
-            CacheItem::Ready(items) => Some(items.clone()),
+        match cache.get(name) {
+            None => CacheItemOut::NotStarted,
+            Some(CacheItem::Pending(_)) => CacheItemOut::Pending,
+            Some(CacheItem::Ready(items)) => CacheItemOut::Ready(items.clone()),
+            Some(CacheItem::Error(err)) => CacheItemOut::Error(err.clone()),
         }
     }
 
@@ -64,6 +73,7 @@ impl InfoProvider {
                 Some(v) => match v {
                     CacheItem::Pending(n) => Some(n.clone()),
                     CacheItem::Ready(items) => return Ok(items.clone()),
+                    CacheItem::Error(_) => unreachable!(),
                 },
                 None => None,
             }
@@ -104,16 +114,13 @@ impl InfoProvider {
             Some(v) => match v {
                 CacheItem::Pending(_) => return Ok(vec![]),
                 CacheItem::Ready(items) => return Ok(items.clone()),
+                CacheItem::Error(_) => unreachable!(),
             },
             None => return Ok(vec![]),
         }
     }
 
-    pub async fn get_info(
-        &self,
-        registry: Option<&str>,
-        name: &str,
-    ) -> Result<Vec<Root1>, anyhow::Error> {
+    pub async fn get_info(&self, registry: Option<&str>, name: &str) -> Result<Vec<Root1>, String> {
         let reg = registry.unwrap_or(self.registry);
         let fetch = {
             let mut lock = self.info_cache.lock().await;
@@ -122,6 +129,7 @@ impl InfoProvider {
                 Some(v) => match v {
                     CacheItem::Pending(n) => Some(n.clone()),
                     CacheItem::Ready(items) => return Ok(items.clone()),
+                    CacheItem::Error(e) => return Err(e.clone()),
                 },
                 None => None,
             }
@@ -149,8 +157,8 @@ impl InfoProvider {
                         Ok(v) => {
                             cache.insert(name.to_owned(), CacheItem::Ready(v.clone()));
                         }
-                        Err(_) => {
-                            cache.remove(&name);
+                        Err(e) => {
+                            cache.insert(name.to_owned(), CacheItem::Error(e.to_string()));
                         }
                     };
 
@@ -167,6 +175,7 @@ impl InfoProvider {
             Some(v) => match v {
                 CacheItem::Pending(_) => return Ok(vec![]),
                 CacheItem::Ready(items) => return Ok(items.clone()),
+                CacheItem::Error(e) => return Err(e.clone()),
             },
             None => return Ok(vec![]),
         }
@@ -259,6 +268,17 @@ pub enum ViewMode {
 }
 
 impl Root1 {
+    pub fn feature_all(&self) -> Vec<String> {
+        let f = self.features.keys().cloned();
+        let mut opt: Vec<_> = self
+            .deps
+            .iter()
+            .filter(|v| v.optional)
+            .map(|v| v.name.clone())
+            .collect();
+        opt.extend(f);
+        opt
+    }
     pub fn features(&self, view_mode: ViewMode) -> Vec<String> {
         let values = self.features.values().flatten().collect::<HashSet<_>>();
         let mut features = self
@@ -291,6 +311,6 @@ impl Root1 {
         features.into_iter().collect()
     }
     pub fn ver(&self) -> Option<RustVersion> {
-        parser::structs::version::RustVersion::try_from(self.vers.as_str()).ok()
+        RustVersion::try_from(self.vers.as_str()).ok()
     }
 }

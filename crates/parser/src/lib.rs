@@ -1,14 +1,16 @@
-pub mod analyze;
+mod analyze;
 mod format;
 pub mod structs;
 pub mod toml;
 pub mod tree;
 mod tree_to_struct;
 
-use std::{collections::HashMap, fs::read_to_string, path::PathBuf, sync::Arc, u8::MAX};
+use std::{collections::HashMap, fs::read_to_string, path::PathBuf, sync::Arc};
 
+use info_provider::api::InfoProvider;
 use ropey::Rope;
 use structs::lock::{CargoLockRaw, Package};
+use tokio::sync::RwLock;
 use toml::{Dependency, Positioned, Toml};
 use tower_lsp::Client;
 use tree::{RangeExclusive, Tree};
@@ -17,24 +19,45 @@ use url::Url;
 
 pub type Uri = url::Url;
 pub struct Db {
+    pub sel: Option<Arc<RwLock<Db>>>,
     pub client: Client,
     files: HashMap<Uri, Rope>,
     trees: HashMap<Uri, Tree>,
     tomls: HashMap<Uri, Toml>,
+    info: Arc<InfoProvider>,
     workspaces: HashMap<Uri, Uri>,
     locks: HashMap<Uri, CargoLockRaw>,
+    pub warnings: Arc<RwLock<HashMap<Uri, Vec<Warning>>>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Level {
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone)]
+pub struct Warning {
+    level: Level,
+    msg: String,
+    start: (usize, usize),
+    end: (usize, usize),
 }
 
 impl Db {
-    pub fn new(client: Client) -> Self {
-        Self {
+    pub fn new(client: Client, info: Arc<InfoProvider>) -> Arc<RwLock<Self>> {
+        let sel = Arc::new(RwLock::new(Self {
+            sel: Default::default(),
             client,
+            info,
             files: HashMap::new(),
             trees: HashMap::new(),
             tomls: HashMap::new(),
             workspaces: HashMap::new(),
             locks: HashMap::new(),
-        }
+            warnings: Default::default(),
+        }));
+        sel
     }
 }
 

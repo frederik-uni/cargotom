@@ -137,7 +137,10 @@ fn dependency_tree_format_parser(value: &Tree, dep: &mut Dependency) {
                 Some(value) => dep.optional = Some(value),
                 None => continue,
             },
-            "workspace" => dep.source.set_workspace(),
+            "workspace" => dep.source.set_workspace(match tree_value.value.range() {
+                Some(v) => v.join(&tree_value.pos),
+                None => tree_value.pos,
+            }),
             _ => {
                 if tree_value.value == Value::Unknown {
                     dep.typing_keys.push(tree_value.key.to_positioned());
