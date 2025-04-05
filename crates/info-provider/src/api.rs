@@ -272,6 +272,26 @@ pub enum ViewMode {
     Features,
 }
 
+fn name_processor(s: &str) -> String {
+    if s.contains("?") {
+        let cr = s.split_once("?").map(|v| v.0).unwrap();
+        if cr.starts_with("dep:") {
+            cr.to_owned()
+        } else {
+            format!("dep:{cr}")
+        }
+    } else if s.contains("/") {
+        let cr = s.split_once("/").map(|v| v.0).unwrap();
+        if cr.starts_with("dep:") {
+            cr.to_owned()
+        } else {
+            format!("dep:{cr}")
+        }
+    } else {
+        s.to_string()
+    }
+}
+
 impl Root1 {
     pub fn feature_all(&self) -> Vec<String> {
         let f = self.features.keys().cloned();
@@ -282,10 +302,29 @@ impl Root1 {
             .map(|v| v.name.clone())
             .collect();
         opt.extend(f);
+        if let Some(v) = self.features2.as_ref().map(|v| v.keys()) {
+            opt.extend(v.cloned());
+        }
         opt
     }
     pub fn features(&self, view_mode: ViewMode) -> Vec<String> {
-        let values = self.features.values().flatten().collect::<HashSet<_>>();
+        let mut values = self
+            .features
+            .values()
+            .flatten()
+            .map(|v| format!("dep:{v}"))
+            .collect::<HashSet<_>>();
+        values.extend(
+            self.features2
+                .as_ref()
+                .map(|v| {
+                    v.values()
+                        .flatten()
+                        .map(|v| name_processor(v))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+        );
         let mut features = self
             .features
             .iter()
@@ -294,6 +333,19 @@ impl Root1 {
                 false => format!("{}: [{}]", v.0, v.1.join(", ")),
             })
             .collect::<BTreeSet<_>>();
+        features.extend(
+            self.features2
+                .as_ref()
+                .map(|v| {
+                    v.iter()
+                        .map(|v| match v.1.is_empty() {
+                            true => v.0.to_owned(),
+                            false => format!("{}: [{}]", v.0, v.1.join(", ")),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+        );
         if view_mode != ViewMode::Features {
             let opt: Vec<_> = self
                 .deps
@@ -303,7 +355,7 @@ impl Root1 {
                 .collect();
             if view_mode == ViewMode::UnusedOpt {
                 for opt in opt {
-                    if values.get(&opt).is_none() {
+                    if values.get(&format!("dep:{opt}")).is_none() {
                         features.insert(format!(r#"{opt}*"#));
                     }
                 }
