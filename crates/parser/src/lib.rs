@@ -184,6 +184,7 @@ impl Db {
     }
     pub async fn reload(&mut self, uri: Uri) {
         let content = self.files.get(&uri);
+        let mut uri_ = Some(uri.clone());
         if let Some(content) = content {
             self.add_content(uri.clone(), &content.to_string());
             if let Some(tree) = self.trees.get(&uri) {
@@ -199,13 +200,16 @@ impl Db {
                         )
                         .unwrap();
                         self.try_init(&ur).await;
-                        self.workspaces.insert(ur, uri.clone());
+                        let v = self.workspaces.insert(ur, uri.clone());
+                        if v.is_some() {
+                            uri_ = None
+                        }
                     }
                 }
                 self.tomls.insert(uri.clone(), str);
             }
         }
-        self.analyze(Some(uri)).await;
+        self.analyze(uri_).await;
     }
 
     pub fn update(
