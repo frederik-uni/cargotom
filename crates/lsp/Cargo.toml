@@ -5,8 +5,8 @@ edition.workspace = true
 
 [dependencies]
 tower-lsp = "0.20.0"
-tokio = { workspace = true, features=["io-std"] }
-parser = {workspace = true}
+tokio = { workspace = true, features = ["io-std"] }
+parser = { workspace = true }
 serde_json = { workspace = true }
 webbrowser = "0.8.15"
 info-provider = { workspace = true }

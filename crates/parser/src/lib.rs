@@ -44,7 +44,7 @@ pub enum Indent {
 }
 
 impl Db {
-    pub fn hints(&self, uri: &Uri) -> Option<Vec<((usize, usize), Package)>> {
+    pub async fn hints(&self, uri: &Uri) -> Option<Vec<((usize, usize), Package)>> {
         let toml = self.tomls.get(uri)?;
         let mut root_file = match self.workspaces.get(uri) {
             None => uri,
@@ -207,7 +207,7 @@ impl Db {
         }
     }
 
-    pub fn add_file(&mut self, file: &Uri) {
+    fn add_file(&mut self, file: &Uri) {
         let path = file.to_string();
         if let Some(path) = path.strip_prefix("file://") {
             if let Ok(data) = read_to_string(path) {
