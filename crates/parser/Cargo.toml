@@ -4,9 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-ropey = "1.6.1"
+ropey.workspace = true
 serde = { workspace = true, features = ["derive"] }
-toml = { workspace = true }
-serde_json = { workspace = true }
-taplo = { workspace = true }
-url = {workspace = true}
+toml.workspace = true
+serde_json.workspace = true
+taplo.workspace = true
+url.workspace = true

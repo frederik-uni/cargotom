@@ -1,5 +1,8 @@
 use taplo::{
-    dom::{node::Table, Node},
+    dom::{
+        node::{Table, TableKind},
+        Node,
+    },
     rowan::TextRange,
 };
 
@@ -8,6 +11,7 @@ use crate::toml::Positioned;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Tree {
     pub nodes: Vec<TreeValue>,
+    pub kind: TableKind,
     pub pos: RangeExclusive,
 }
 
@@ -99,6 +103,7 @@ impl From<&Table> for Tree {
             .collect();
         Self {
             nodes,
+            kind: table.kind(),
             pos: match table.inner.syntax.as_ref().unwrap() {
                 taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
                 taplo::rowan::NodeOrToken::Token(token) => token.text_range(),

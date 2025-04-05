@@ -20,18 +20,17 @@
 - [x] Open LSP docs(first line)
 - [x] Open LSP issues(first line)
 - [x] Open Cargo.toml docs(first line)
-- [ ] "Make Workspace dependency" => This will generate `{ workspace = true }` for the dependency
-- [ ] "Expand dependency specification" => This will convert from `"0.1.0"` to `{ version = "0.1.0" }`
-- [ ] "Collapse dependency specification" => This will convert from `{ version = "0.1.0" }` to `"0.1.0`
+- [x] "Make Workspace dependency" => This will generate `{ workspace = true }` for the dependency
+- [x] "Expand dependency specification" => This will convert from `"0.1.0"` to `{ version = "0.1.0" }`
+- [x] "Collapse dependency specification" => This will convert from `{ version = "0.1.0" }` to `"0.1.0`
 - [x] "Open Docs" => opens docs.rs/...
 - [x] "Open crates.io" => opens crates.io/...
-- [ ] "Open Src code" => opens src code on github
-- [ ] "Upgrade" => will upgrade the dependency version to the latest version
+- [x] "Open Src code" => opens src code on github
+- [x] "Upgrade" => will upgrade the dependency version to the latest version
 - [ ] "Upgrade All" => will upgrade every dependency version to the latest version
 - [ ] "Update All" => will run `cargo run`
-- [ ] toggle optional dependency
+- [x] toggle optional dependency
 - [ ] make dependency optional if in feature
-- [ ] Move to workspace
 
 
 ### Inlay Hint

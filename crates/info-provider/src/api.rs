@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use parser::structs::version::RustVersion;
 use reqwest::{header::USER_AGENT, Client};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, Notify};
@@ -28,11 +29,22 @@ impl InfoProvider {
         }
     }
 
-    pub async fn get_info_cache(
-        &mut self,
-        registry: Option<&str>,
-        name: &str,
-    ) -> Option<Vec<Root1>> {
+    pub async fn get_crate_repository(&self, crate_name: &str) -> Option<String> {
+        let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
+
+        let response = self
+            .client
+            .get(&url)
+            .header(USER_AGENT, "zed")
+            .send()
+            .await
+            .ok()?;
+        let json: serde_json::Value = response.json().await.ok()?;
+        println!("{:#?}", json);
+        json["crate"]["repository"].as_str().map(|s| s.to_string())
+    }
+
+    pub async fn get_info_cache(&self, registry: Option<&str>, name: &str) -> Option<Vec<Root1>> {
         let reg = registry.unwrap_or(self.registry);
         let mut lock = self.info_cache.lock().await;
         let cache = lock.entry(reg.to_owned()).or_default();
@@ -42,7 +54,7 @@ impl InfoProvider {
         }
     }
 
-    pub async fn search(&mut self, name: &str) -> Result<Vec<Crate>, Box<dyn std::error::Error>> {
+    pub async fn search(&self, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
         let fetch = {
             let lock = self.search_cache.lock().await;
             match lock.get(name) {
@@ -89,10 +101,10 @@ impl InfoProvider {
     }
 
     pub async fn get_info(
-        &mut self,
+        &self,
         registry: Option<&str>,
         name: &str,
-    ) -> Result<Vec<Root1>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<Root1>, anyhow::Error> {
         let reg = registry.unwrap_or(self.registry);
         let fetch = {
             let mut lock = self.info_cache.lock().await;
@@ -145,11 +157,7 @@ impl InfoProvider {
     }
 }
 
-async fn search(
-    client: &Client,
-    per_page: usize,
-    name: &str,
-) -> Result<Vec<Crate>, Box<dyn std::error::Error>> {
+async fn search(client: &Client, per_page: usize, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
     let url = format!(
         "https://crates.io/api/v1/crates?page=1&per_page={}&q={}&sort=relevance",
         per_page,
@@ -181,7 +189,7 @@ async fn info(
     client: &reqwest::Client,
     registry: &str,
     name: &str,
-) -> Result<Vec<Root1>, Box<dyn std::error::Error>> {
+) -> Result<Vec<Root1>, anyhow::Error> {
     let mut registry = registry.to_string();
     if !registry.ends_with("/") {
         registry.push('/');
@@ -199,6 +207,7 @@ async fn info(
     );
     let data = client
         .get(url)
+        .header(USER_AGENT, "zed")
         .send()
         .await?
         .text()
@@ -219,9 +228,15 @@ pub struct Deps1 {
 #[derive(Deserialize, Clone)]
 pub struct Root1 {
     pub name: String,
-    pub vers: String,
+    vers: String,
     yanked: bool,
     pub deps: Vec<Deps1>,
     pub features: HashMap<String, Vec<String>>,
     pub features2: Option<HashMap<String, Vec<String>>>,
+}
+
+impl Root1 {
+    pub fn ver(&self) -> Option<RustVersion> {
+        parser::structs::version::RustVersion::try_from(self.vers.as_str()).ok()
+    }
 }

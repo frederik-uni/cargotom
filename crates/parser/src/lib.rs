@@ -23,6 +23,22 @@ pub struct Db {
 }
 
 impl Db {
+    pub fn get_line(&self, uri: &Uri, bytes_offset: usize) -> Option<usize> {
+        if let Some(v) = self.files.get(uri) {
+            let line_index = v.byte_to_line(bytes_offset);
+            return Some(line_index);
+        }
+        None
+    }
+
+    pub fn get_workspace(&self, uri: &Uri) -> Option<&Uri> {
+        self.workspaces.get(uri)
+    }
+
+    pub fn get_toml(&self, uri: &Uri) -> Option<&Toml> {
+        self.tomls.get(uri)
+    }
+
     pub fn get_offset(&self, uri: &Uri, byte_offset: usize) -> Option<(usize, usize)> {
         if let Some(v) = self.files.get(uri) {
             let line_index = v.byte_to_line(byte_offset);

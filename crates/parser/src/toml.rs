@@ -67,8 +67,8 @@ pub struct Dependency {
     pub source: DepSource,
     /// Enable features for this dependency
     pub features: Vec<Positioned<String>>,
-    pub(crate) features_key_range: Option<RangeExclusive>,
-    pub(crate) default_features: Option<Positioned<bool>>,
+    pub features_key_range: Option<RangeExclusive>,
+    pub default_features: Option<Positioned<bool>>,
     /// Keys that are being typed
     pub typing_keys: Vec<Positioned<String>>,
     /// Is optional dependency
@@ -76,7 +76,7 @@ pub struct Dependency {
     pub expanded: bool,
     /// Target platforms for this dependency
     /// if empty = all platforms
-    pub(crate) target: Arc<Vec<Positioned<Target>>>,
+    pub target: Arc<Vec<Positioned<Target>>>,
 }
 
 impl Display for DepSource {
@@ -156,9 +156,21 @@ impl Display for Dependency {
 
                 write!(f, "{} = {{ {} }}", self.name.data, items.join(", "))
             }
-            false => match self.source.version() {
-                Some(version) => write!(f, "{} = \"{}\"", &self.name.data, version.data),
-                None => write!(f, "{}", &self.name.data),
+            false => match &self.source {
+                DepSource::Version { value, .. } => {
+                    write!(f, "{} = \"{}\"", &self.name.data, &value.value.data)
+                }
+                DepSource::Git { url, .. } => write!(
+                    f,
+                    "{}.git = \"{}\"",
+                    &self.name.data,
+                    url.clone().map(|v| v.value.data).unwrap_or_default(),
+                ),
+                DepSource::Path(path) => {
+                    write!(f, "{}.path = \"{}\"", &self.name.data, &path.value.data,)
+                }
+                DepSource::None => write!(f, "{}", &self.name.data,),
+                DepSource::Workspace => write!(f, "{}.workspace = true", &self.name.data,),
             },
         }
     }
@@ -218,7 +230,7 @@ impl From<&str> for Source {
 #[derive(Debug, Clone)]
 pub struct WithKey {
     key: RangeExclusive,
-    value: Positioned<String>,
+    pub value: Positioned<String>,
 }
 
 impl WithKey {

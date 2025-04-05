@@ -1,17 +1,16 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use info_provider::api::InfoProvider;
-use parser::toml::Positioned;
 use parser::Db;
+use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandParams, MessageType,
-    Position, Range, ServerCapabilities, ServerInfo, SignatureHelpOptions,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url,
-    WorkspaceEdit,
+    ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, Url,
 };
 use tower_lsp::{
     async_trait,
@@ -21,7 +20,7 @@ use tower_lsp::{
 
 pub struct Context {
     pub client: Client,
-    db: Arc<Mutex<Db>>,
+    db: Arc<RwLock<Db>>,
     info: Arc<InfoProvider>,
 }
 
@@ -34,7 +33,7 @@ macro_rules! crate_version {
 #[async_trait]
 impl LanguageServer for Context {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        let mut lock = self.db.lock().unwrap();
+        let mut lock = self.db.write().await;
         for v in params.workspace_folders.unwrap_or_default() {
             let mut root = v.uri;
             if !root.as_str().ends_with('/') {
@@ -92,7 +91,11 @@ impl LanguageServer for Context {
                 folding_range_provider: None,
                 declaration_provider: None,
                 execute_command_provider: Some(tower_lsp::lsp_types::ExecuteCommandOptions {
-                    commands: vec!["open_url".to_string(), "cargo-update".to_string()],
+                    commands: vec![
+                        "open_url".to_string(),
+                        "cargo-update".to_string(),
+                        "open-src".to_string(),
+                    ],
                     ..Default::default()
                 }),
                 workspace: None,
@@ -119,7 +122,7 @@ impl LanguageServer for Context {
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         if uri.to_string().ends_with("/Cargo.lock") {
-            let mut lock = self.db.lock().unwrap();
+            let mut lock = self.db.write().await;
             lock.update_lock(uri);
             return;
         }
@@ -127,7 +130,7 @@ impl LanguageServer for Context {
             return;
         }
         {
-            let mut lock = self.db.lock().unwrap();
+            let mut lock = self.db.write().await;
             for change in params.content_changes {
                 let range = change.range.map(|v| {
                     (
@@ -146,7 +149,7 @@ impl LanguageServer for Context {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
         if uri.to_string().ends_with("/Cargo.lock") {
-            let mut lock = self.db.lock().unwrap();
+            let mut lock = self.db.write().await;
             lock.update_lock(uri);
             return;
         }
@@ -154,7 +157,7 @@ impl LanguageServer for Context {
             return;
         }
         {
-            let mut lock = self.db.lock().unwrap();
+            let mut lock = self.db.write().await;
             lock.update(&uri, None, &params.text_document.text);
             lock.reload(uri);
         }
@@ -171,7 +174,7 @@ impl LanguageServer for Context {
         if params.range.start.line == 0 || params.range.end.line == 0 {
             actions.extend(self.first_line_actions().await);
         }
-        let lock = self.db.lock().unwrap();
+        let lock = self.db.read().await;
         if let Some(dep) = lock.get_dependency(
             &uri,
             (
@@ -183,58 +186,41 @@ impl LanguageServer for Context {
                 params.range.end.character as usize,
             ),
         ) {
-            let mut data = dep.data.clone();
-            if let (Some(start), Some(end)) = (
-                lock.get_offset(&uri, dep.start as usize),
-                lock.get_offset(&uri, dep.end as usize),
-            ) {
-                let action = CodeAction {
-                    title: match data.optional.map(|v| v.data).unwrap_or_default() {
-                        true => "Remove optional",
-                        false => "Make optional",
-                    }
-                    .to_owned(),
-                    kind: Some(CodeActionKind::EMPTY),
-                    edit: {
-                        if let Some(opt) = &mut data.optional {
-                            opt.data = !opt.data;
-                        } else {
-                            data.optional = Some(Positioned::new(0, 0, true))
-                        }
-                        Some(WorkspaceEdit {
-                            change_annotations: None,
-                            document_changes: None,
-                            changes: Some(
-                                vec![(
-                                    uri,
-                                    vec![TextEdit {
-                                        range: Range::new(
-                                            Position {
-                                                line: start.0 as u32,
-                                                character: start.1 as u32,
-                                            },
-                                            Position {
-                                                line: end.0 as u32,
-                                                character: end.1 as u32,
-                                            },
-                                        ),
-                                        new_text: data.to_string(),
-                                    }],
-                                )]
-                                .into_iter()
-                                .collect(),
-                            ),
-                        })
-                    },
-                    ..CodeAction::default()
-                };
-                actions.push(CodeActionOrCommand::CodeAction(action));
+            if let Some(a) = self.dep_actions(&uri, dep, &lock) {
+                actions.extend(a.into_iter().map(CodeActionOrCommand::CodeAction));
             }
-
-            if let Some(v) = dep.data.source.version() {
+            if let parser::toml::DepSource::Version { value, registry } = &dep.data.source {
                 //TODO: check up to date
+                let version_info = self
+                    .info
+                    .get_info(
+                        registry.as_ref().map(|v| v.value.data.as_str()),
+                        &dep.data.name.data,
+                    )
+                    .await;
+                self.client.log_message(MessageType::INFO, "version").await;
+                match version_info {
+                    Ok(data) => {
+                        if let Some(last) = data.last() {
+                            self.client
+                                .log_message(MessageType::INFO, "foind root")
+                                .await;
+
+                            if let Some(upgrade_dep) =
+                                self.upgrade_dep(&uri, &value.value, last.ver(), &lock)
+                            {
+                                self.client
+                                    .log_message(MessageType::INFO, "foind pushed")
+                                    .await;
+                                actions.push(CodeActionOrCommand::CodeAction(upgrade_dep));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                let version = &value.value.data;
+
                 let name = &dep.data.name.data;
-                let version = &v.data;
                 let action = CodeAction {
                     title: "Open Docs".to_string(),
                     kind: Some(CodeActionKind::EMPTY),
@@ -244,6 +230,20 @@ impl LanguageServer for Context {
                         arguments: Some(vec![serde_json::Value::String(format!(
                             "https://docs.rs/{name}/{version}/"
                         ))]),
+                    }),
+                    ..CodeAction::default()
+                };
+                actions.push(CodeActionOrCommand::CodeAction(action));
+                let action = CodeAction {
+                    title: "Open Source".to_string(),
+                    kind: Some(CodeActionKind::EMPTY),
+                    command: Some(Command {
+                        title: "Open Source".to_string(),
+                        command: "open-src".to_string(),
+                        arguments: Some(vec![
+                            serde_json::Value::String(name.clone()),
+                            serde_json::Value::String(version.clone()),
+                        ]),
                     }),
                     ..CodeAction::default()
                 };
@@ -268,11 +268,39 @@ impl LanguageServer for Context {
 
     async fn execute_command(
         &self,
-        params: ExecuteCommandParams,
+        mut params: ExecuteCommandParams,
     ) -> tower_lsp::jsonrpc::Result<Option<serde_json::Value>> {
         if params.command == "cargo-update" {
             let _ = std::process::Command::new("cargo").arg("update").spawn();
-        } else if params.command == "open_url" {
+            return Ok(None);
+        }
+
+        if params.command == "open-src" {
+            let name = params.arguments.get(0).and_then(|arg| arg.as_str());
+            let version = params.arguments.get(1).and_then(|arg| arg.as_str());
+            let mut src = if let Some(name) = name {
+                self.info.get_crate_repository(name).await
+            } else {
+                None
+            };
+            if src.is_none() {
+                match (name, version) {
+                    (Some(name), Some(version)) => {
+                        src = Some(format!(
+                            "https://docs.rs/crate/{}/{}/source/",
+                            name, version
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(src) = src {
+                params.command = "open_url".to_string();
+                params.arguments = vec![serde_json::Value::String(src)]
+            }
+        }
+
+        if params.command == "open_url" {
             let mut args = params.arguments.iter();
             if let Some(url) = args.next().and_then(|arg| arg.as_str()) {
                 if let Err(e) = webbrowser::open(url) {

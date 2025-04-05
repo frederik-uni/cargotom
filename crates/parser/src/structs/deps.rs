@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use taplo::dom::node::TableKind;
+
 use crate::{
     toml::{DepSource, Dependency, DependencyKind, OptionalKey, Positioned, Target, WithKey},
     tree::{str_to_positioned, Value},
@@ -30,6 +32,7 @@ pub fn get_dependencies(
         match &dep_tree.value {
             Value::Tree { value, .. } => {
                 dependency_tree_format_parser(value, &mut dep);
+                dep.expanded = value.kind == TableKind::Inline
             }
             Value::String { value, range } => {
                 dep.source = DepSource::Version {
@@ -38,7 +41,9 @@ pub fn get_dependencies(
                 };
                 dep.expanded = false;
             }
-            Value::NoContent => {}
+            Value::NoContent => {
+                dep.expanded = false;
+            }
             _ => continue,
         }
         let range = dep_tree.range();
@@ -129,6 +134,7 @@ fn dependency_tree_format_parser(value: &Tree, dep: &mut Dependency) {
                 Some(value) => dep.optional = Some(value),
                 None => continue,
             },
+            "workspace" => dep.source.set_workspace(),
             _ => {
                 if tree_value.value == Value::Unknown {
                     dep.typing_keys.push(tree_value.key.to_positioned());
