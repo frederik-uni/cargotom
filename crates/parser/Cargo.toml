@@ -11,8 +11,8 @@ serde_json.workspace = true
 taplo.workspace = true
 url.workspace = true
 difference = "2.0.0"
-tower-lsp = "0.20.0"
+tower-lsp.workspace = true
 info-provider = { workspace = true }
 rust-version.workspace = true
-tokio = { workspace = true, features = ["full"] }
-async-recursion = "1"
+tokio = { workspace = true, features = ["sync"] }
+async-recursion.workspace = true

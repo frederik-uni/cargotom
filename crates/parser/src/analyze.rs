@@ -60,7 +60,18 @@ impl Db {
             }
         }
         for toml in &toml.dependencies {
-            if let DepSource::Version { value, registry } = &toml.data.source {
+            let src = if let DepSource::Workspace(range) = &toml.data.source {
+                workspace.and_then(|v| {
+                    v.dependencies
+                        .iter()
+                        .find(|v| v.data.name.data == toml.data.name.data)
+                        .map(|v| (&v.data.source, Some(range.clone())))
+                })
+            } else {
+                Some((&toml.data.source, toml.data.source.range()))
+            };
+            if let Some((DepSource::Version { value, registry }, range)) = src {
+                let range = range.unwrap();
                 let info = self
                     .info
                     .get_info_cache(
@@ -110,15 +121,12 @@ impl Db {
                                     .rfind(|(_, v)| v > &ver)
                                 {
                                     warnings.push((
-                                        RangeExclusive::from(&value.value),
+                                        range,
                                         format!("Newer version available: {}", info.vers),
                                     ))
                                 }
                             } else {
-                                errors.push((
-                                    RangeExclusive::from(&value.value),
-                                    "Invalid version".to_string(),
-                                ))
+                                errors.push((range, "Invalid version".to_string()))
                             }
                         }
                     }
