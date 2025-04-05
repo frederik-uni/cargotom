@@ -95,7 +95,7 @@ jobs:
 
       - name: Get version from Cargo.toml
         id: get_version
-        run: echo "version=$(awk -F'"' '/\[package\]/ {p=1} p && /version/ {print $2; exit}' Cargo.toml)" >> $GITHUB_ENV
+        run: echo "version=$(awk -F'"' '/\[workspace.package\]/ {p=1} p && /version/ {print $2; exit}' Cargo.toml)" >> $GITHUB_ENV
 
       - name: Get latest release tag
         id: get_latest_release
