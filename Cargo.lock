@@ -875,6 +875,7 @@ dependencies = [
  "info-provider",
  "parser",
  "rust-version",
+ "serde",
  "serde_json",
  "tokio",
  "tower-lsp",

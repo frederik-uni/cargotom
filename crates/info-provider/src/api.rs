@@ -6,7 +6,7 @@ use std::{
 use reqwest::{header::USER_AGENT, Client};
 use rust_version::RustVersion;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{Mutex, Notify, RwLock};
 
 pub enum CacheItem<T> {
     Pending(Arc<Notify>),
@@ -26,7 +26,7 @@ pub struct InfoProvider {
     registry: &'static str,
     info_cache: Arc<Mutex<HashMap<String, HashMap<String, CacheItem<Root1>>>>>,
     search_cache: Arc<Mutex<HashMap<String, CacheItem<Crate>>>>,
-    per_page: usize,
+    per_page: RwLock<usize>,
 }
 
 impl InfoProvider {
@@ -36,8 +36,13 @@ impl InfoProvider {
             registry: "https://index.crates.io/",
             info_cache: Default::default(),
             search_cache: Default::default(),
-            per_page,
+            per_page: RwLock::new(per_page),
         }
+    }
+
+    pub async fn set_per_page(&self, per_page: usize) {
+        *self.per_page.write().await = per_page;
+        self.search_cache.lock().await.drain();
     }
 
     pub async fn get_crate_repository(&self, crate_name: &str) -> Option<String> {
@@ -88,7 +93,7 @@ impl InfoProvider {
                     lock.insert(name.to_owned(), CacheItem::Pending(notify.clone()));
                 }
                 let client = self.client.clone();
-                let per_page = self.per_page;
+                let per_page = *self.per_page.read().await;
                 let name = name.to_owned();
                 let search_cache = self.search_cache.clone();
                 tokio::spawn(async move {
@@ -260,7 +265,7 @@ pub struct Root1 {
     pub features2: Option<HashMap<String, Vec<String>>>,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub enum ViewMode {
     All,
     UnusedOpt,

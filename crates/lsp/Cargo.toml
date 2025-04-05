@@ -11,3 +11,4 @@ serde_json = { workspace = true }
 webbrowser = "0.8.15"
 info-provider = { workspace = true }
 rust-version.workspace = true
+serde = { workspace = true, features = ["derive"] }

@@ -134,7 +134,7 @@ impl Context {
                             Some(v) => Some(v),
                             None => None,
                         } == Some(&vers))
-                        .map(|v| v.features(ViewMode::UnusedOpt))
+                        .map(|v| v.features(lock.config.feature_display_mode))
                         .unwrap_or_default()
                         .into_iter()
                         .map(|v| format!("- {v}"))

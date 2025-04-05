@@ -1,4 +1,5 @@
 mod analyze;
+pub mod config;
 mod format;
 pub mod structs;
 pub mod toml;
@@ -7,6 +8,7 @@ mod tree_to_struct;
 
 use std::{collections::HashMap, fs::read_to_string, path::PathBuf, sync::Arc};
 
+use config::Config;
 use info_provider::api::InfoProvider;
 use ropey::Rope;
 use structs::lock::{CargoLockRaw, Package};
@@ -28,6 +30,7 @@ pub struct Db {
     workspaces: HashMap<Uri, Uri>,
     locks: HashMap<Uri, CargoLockRaw>,
     pub warnings: Arc<RwLock<HashMap<Uri, Vec<Warning>>>>,
+    pub config: Config,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +50,7 @@ pub struct Warning {
 impl Db {
     pub fn new(client: Client, info: Arc<InfoProvider>) -> Arc<RwLock<Self>> {
         let sel = Arc::new(RwLock::new(Self {
+            config: Config::default(),
             sel: Default::default(),
             client,
             info,

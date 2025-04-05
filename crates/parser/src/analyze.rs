@@ -101,7 +101,14 @@ impl Db {
                                         ))
                                     }
                                 }
-                                if let Some((info, _)) = versions.iter().rfind(|(_, v)| v > &ver) {
+                                if let Some((info, _)) = versions
+                                    .iter()
+                                    .filter(|v| match self.config.stable_version {
+                                        true => v.1.is_patch_int(),
+                                        false => true,
+                                    })
+                                    .rfind(|(_, v)| v > &ver)
+                                {
                                     warnings.push((
                                         RangeExclusive::from(&value.value),
                                         format!("Newer version available: {}", info.vers),
@@ -158,16 +165,21 @@ impl Db {
         }
         let lock = self.warnings.write();
         lock.await.insert(uri.clone(), warn.clone());
-
+        let hide_docs_info_message = self.config.hide_docs_info_message;
         self.client
-            .publish_diagnostics(uri.clone(), to_diagnostics(warn), None)
+            .publish_diagnostics(
+                uri.clone(),
+                to_diagnostics(hide_docs_info_message, warn),
+                None,
+            )
             .await;
         Some(())
     }
 }
 
-fn to_diagnostics(items: Vec<Warning>) -> Vec<Diagnostic> {
-    let mut d =vec![Diagnostic {
+fn to_diagnostics(hide_docs_info_message: bool, items: Vec<Warning>) -> Vec<Diagnostic> {
+    let mut d =match hide_docs_info_message{
+        true => vec![Diagnostic {
         range: Range {
                 start: Position {
                     line: 0,
@@ -185,7 +197,8 @@ fn to_diagnostics(items: Vec<Warning>) -> Vec<Diagnostic> {
         related_information: None,
         tags: None,
         data: None,
-    }];
+    }],
+        false => vec![]};
     for item in items {
         d.push(Diagnostic {
             range: Range {

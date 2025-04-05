@@ -18,12 +18,12 @@ impl Db {
     pub fn format(
         &self,
         uri: &Uri,
-        sort: bool,
         trailing_new_line: bool,
         indent: Indent,
     ) -> Option<Vec<(((usize, usize), (usize, usize)), String)>> {
         let content = self.get_content(uri)?;
         let crlf = content.contains("\r\n");
+        let sort = self.config.sort_format;
         let new = taplo::formatter::format(
             &content,
             Options {

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use info_provider::api::InfoProvider;
+use parser::config::Config;
 use parser::{Db, Indent};
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
@@ -24,7 +25,6 @@ pub struct Context {
     pub client: Client,
     db: Arc<RwLock<Db>>,
     pub info: Arc<InfoProvider>,
-    sort: bool,
 }
 
 macro_rules! crate_version {
@@ -32,11 +32,20 @@ macro_rules! crate_version {
         env!("CARGO_PKG_VERSION")
     };
 }
+fn load_config(params: &InitializeParams) -> Config {
+    params
+        .initialization_options
+        .clone()
+        .map(serde_json::from_value)
+        .and_then(|v| v.ok())
+        .unwrap_or_default()
+}
 
 #[async_trait]
 impl LanguageServer for Context {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let c = self.db.clone();
+        let config = load_config(&params);
         self.client
             .log_message(MessageType::INFO, "aquire write lock init")
             .await;
@@ -44,6 +53,8 @@ impl LanguageServer for Context {
         self.client
             .log_message(MessageType::INFO, "aquired write lock init")
             .await;
+        lock.config = config;
+        self.info.set_per_page(lock.config.per_page).await;
         lock.sel = Some(c);
         for v in params.workspace_folders.unwrap_or_default() {
             let mut root = v.uri;
@@ -382,7 +393,6 @@ impl LanguageServer for Context {
         let data = temp
             .format(
                 &params.text_document.uri,
-                self.sort,
                 params.options.insert_final_newline.unwrap_or(true),
                 match params.options.insert_spaces {
                     true => Indent::Spaces(params.options.tab_size),
@@ -463,7 +473,6 @@ pub async fn main(path: PathBuf) {
         client: client.clone(),
         db: Db::new(client, info.clone()),
         info,
-        sort: false,
     })
     .finish();
 
