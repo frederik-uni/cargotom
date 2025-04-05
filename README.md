@@ -27,14 +27,14 @@
 - [x] "Open crates.io" => opens crates.io/...
 - [x] "Open Src code" => opens src code on github
 - [x] "Upgrade" => will upgrade the dependency version to the latest version
-- [x] "Upgrade All" => will upgrade every dependency version to the latest version
-- [ ] "Update All" => will run `cargo run`
+- [ ] "Upgrade All" => will upgrade every dependency version to the latest version
+- [x] "Update All" => will run `cargo update`
 - [x] toggle optional dependency
 - [ ] make dependency optional if in feature
 
 
 ### Inlay Hint
-- [ ] used version in Cargo.lock
+- [x] used version in Cargo.lock
 
 ### Hover
 - [ ] available versions
@@ -63,10 +63,10 @@
 - [ ] check if version is set & dep in workspace
 - [ ] check for feature duplicate
 - [ ] check for dep duplicate
-- [ ] check if `dep:crate_name` is optional
+- [ ] check if `dep:crate_name` is optional
 
 ### Formatter
-- [ ] enable taplo formatter
+- [x] enable taplo formatter
 - [ ] auto close { when content inside
 
 ## Plans

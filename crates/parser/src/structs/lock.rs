@@ -38,7 +38,7 @@ struct PackageRaw {
     dependencies: Option<Vec<Value>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A package parsed from the Cargo.lock file
 pub struct Package {
     /// version of the package
@@ -97,7 +97,7 @@ impl Package {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Source {
     Registry(String),
     Git {

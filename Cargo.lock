@@ -148,7 +148,7 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cargotom"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "lsp",
  "tokio",
@@ -736,7 +736,7 @@ dependencies = [
 
 [[package]]
 name = "info-provider"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "parser",
@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "lsp"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "info-provider",
  "parser",
@@ -1045,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "difference",
  "ropey",
@@ -1053,6 +1053,7 @@ dependencies = [
  "serde_json",
  "taplo",
  "toml",
+ "tower-lsp",
  "url",
 ]
 

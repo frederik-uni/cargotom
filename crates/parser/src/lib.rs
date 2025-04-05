@@ -1,26 +1,41 @@
+pub mod analyze;
 mod format;
 pub mod structs;
 pub mod toml;
 pub mod tree;
 mod tree_to_struct;
 
-use std::{collections::HashMap, fs::read_to_string, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, fs::read_to_string, path::PathBuf, sync::Arc, u8::MAX};
 
 use ropey::Rope;
-use structs::lock::CargoLockRaw;
+use structs::lock::{CargoLockRaw, Package};
 use toml::{Dependency, Positioned, Toml};
+use tower_lsp::Client;
 use tree::{RangeExclusive, Tree};
 use tree_to_struct::to_struct;
 use url::Url;
 
 pub type Uri = url::Url;
-#[derive(Default)]
 pub struct Db {
+    pub client: Client,
     files: HashMap<Uri, Rope>,
     trees: HashMap<Uri, Tree>,
     tomls: HashMap<Uri, Toml>,
     workspaces: HashMap<Uri, Uri>,
     locks: HashMap<Uri, CargoLockRaw>,
+}
+
+impl Db {
+    pub fn new(client: Client) -> Self {
+        Self {
+            client,
+            files: HashMap::new(),
+            trees: HashMap::new(),
+            tomls: HashMap::new(),
+            workspaces: HashMap::new(),
+            locks: HashMap::new(),
+        }
+    }
 }
 
 pub enum Indent {
@@ -29,6 +44,29 @@ pub enum Indent {
 }
 
 impl Db {
+    pub fn hints(&self, uri: &Uri) -> Option<Vec<((usize, usize), Package)>> {
+        let toml = self.tomls.get(uri)?;
+        let mut root_file = match self.workspaces.get(uri) {
+            None => uri,
+            Some(v) => v,
+        }
+        .clone();
+        root_file.path_segments_mut().unwrap().pop();
+        root_file.path_segments_mut().unwrap().push("Cargo.lock");
+        let lock = self.locks.get(&root_file)?;
+        let packges = lock.packages();
+        let extract = |id| packges.get(id)?.first();
+        let data = toml
+            .dependencies
+            .iter()
+            .filter_map(|v| {
+                self.get_offset(uri, v.end as usize)
+                    .map(|pos| (pos, extract(&v.data.name.data)))
+            })
+            .filter_map(|(pos, p)| p.map(|p| (pos, p.clone())))
+            .collect::<Vec<_>>();
+        Some(data)
+    }
     pub fn get_content(&self, uri: &Uri) -> Option<String> {
         Some(self.files.get(uri)?.to_string())
     }
@@ -78,7 +116,7 @@ impl Db {
         }
         None
     }
-    pub fn update_lock(&mut self, uri: Uri) {
+    pub async fn update_lock(&mut self, uri: Uri) {
         if let Ok(path) = uri.to_file_path() {
             if let Ok(str) = read_to_string(path) {
                 if let Ok(lock) = ::toml::from_str::<CargoLockRaw>(&str) {
@@ -86,6 +124,8 @@ impl Db {
                 }
             }
         }
+
+        self.analyze(None).await;
     }
 
     pub fn get_dependency(
@@ -106,7 +146,7 @@ impl Db {
             .find(|v| v.overlap(RangeExclusive::new(bs as u32, be as u32)))?;
         Some(found)
     }
-    pub fn reload(&mut self, uri: Uri) {
+    pub async fn reload(&mut self, uri: Uri) {
         let content = self.files.get(&uri);
         if let Some(content) = content {
             self.add_content(uri.clone(), &content.to_string());
@@ -122,13 +162,14 @@ impl Db {
                             &new_path.unwrap_or(PathBuf::from(format!("{}/Cargo.toml", ur))),
                         )
                         .unwrap();
-                        self.try_init(&ur);
+                        self.try_init(&ur).await;
                         self.workspaces.insert(ur, uri.clone());
                     }
                 }
-                self.tomls.insert(uri, str);
+                self.tomls.insert(uri.clone(), str);
             }
         }
+        self.analyze(Some(uri)).await;
     }
 
     pub fn update(
@@ -148,7 +189,7 @@ impl Db {
         }
     }
 
-    pub fn try_init(&mut self, file: &Uri) {
+    pub async fn try_init(&mut self, file: &Uri) {
         if !self.files.contains_key(file) {
             self.add_file(file);
         }
@@ -162,7 +203,7 @@ impl Db {
         )
         .unwrap();
         if !self.locks.contains_key(&file) {
-            self.update_lock(file);
+            self.update_lock(file).await;
         }
     }
 
@@ -183,29 +224,5 @@ impl Db {
         if let Some(tree) = tree {
             self.trees.insert(uri, tree);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use std::path::PathBuf;
-
-    use url::Url;
-
-    use crate::Db;
-
-    #[test]
-    fn parse() {
-        let mut db = Db::default();
-        let uri = Url::from_file_path(&PathBuf::from(
-            "/Users/frederik/code/rust/cargotom/Cargo.toml",
-        ))
-        .unwrap();
-        db.add_file(&uri);
-        assert_eq!(db.files.len(), 1);
-        db.reload(uri.clone());
-        assert_eq!(db.files.len(), 3);
-        println!("{:#?}", db.tomls)
     }
 }

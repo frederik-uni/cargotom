@@ -9,9 +9,9 @@ use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
-    ExecuteCommandParams, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
-    SignatureHelpOptions, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextEdit, Url,
+    ExecuteCommandParams, InlayHint, InlayHintKind, InlayHintParams, MessageType, OneOf, Position,
+    Range, ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url,
 };
 use tower_lsp::{
     async_trait,
@@ -106,7 +106,7 @@ impl LanguageServer for Context {
                 moniker_provider: None,
                 linked_editing_range_provider: None,
                 inline_value_provider: None,
-                inlay_hint_provider: None,
+                inlay_hint_provider: Some(OneOf::Left(true)),
                 diagnostic_provider: None,
                 experimental: None,
             },
@@ -125,7 +125,7 @@ impl LanguageServer for Context {
         let uri = params.text_document.uri.clone();
         if uri.to_string().ends_with("/Cargo.lock") {
             let mut lock = self.db.write().await;
-            lock.update_lock(uri);
+            lock.update_lock(uri).await;
             return;
         }
         if !self.shoud_allow_user(&uri) {
@@ -142,7 +142,7 @@ impl LanguageServer for Context {
                 });
                 lock.update(&uri, range, &change.text);
             }
-            lock.reload(uri);
+            lock.reload(uri).await;
         }
 
         let _ = self.client.inlay_hint_refresh().await;
@@ -152,7 +152,7 @@ impl LanguageServer for Context {
         let uri = params.text_document.uri;
         if uri.to_string().ends_with("/Cargo.lock") {
             let mut lock = self.db.write().await;
-            lock.update_lock(uri);
+            lock.update_lock(uri).await;
             return;
         }
         if !self.shoud_allow_user(&uri) {
@@ -161,7 +161,7 @@ impl LanguageServer for Context {
         {
             let mut lock = self.db.write().await;
             lock.update(&uri, None, &params.text_document.text);
-            lock.reload(uri);
+            lock.reload(uri).await;
         }
         let _ = self.client.inlay_hint_refresh().await;
     }
@@ -356,6 +356,28 @@ impl LanguageServer for Context {
             .collect();
         Ok(Some(data))
     }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let v = self
+            .db
+            .read()
+            .await
+            .hints(&params.text_document.uri)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|v| InlayHint {
+                position: Position::new(v.0 .0 as u32, v.0 .1 as u32),
+                label: tower_lsp::lsp_types::InlayHintLabel::String(v.1.label()),
+                kind: Some(InlayHintKind::TYPE),
+                text_edits: None,
+                tooltip: None,
+                padding_left: Some(true),
+                padding_right: Some(true),
+                data: None,
+            })
+            .collect();
+        Ok(Some(v))
+    }
 }
 
 pub async fn main(path: PathBuf) {
@@ -363,8 +385,8 @@ pub async fn main(path: PathBuf) {
     let stdout = tokio::io::stdout();
 
     let (client, server) = LspService::build(|client| Context {
-        client,
-        db: Default::default(),
+        client: client.clone(),
+        db: Arc::new(RwLock::new(Db::new(client))),
         info: Arc::new(InfoProvider::new(50)),
         sort: false,
     })
