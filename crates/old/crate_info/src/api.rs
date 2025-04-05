@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use parser::structure::RustVersion;
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 
@@ -151,7 +152,7 @@ struct SearchResponse {
 use serde_json::Value;
 use tokio::sync::Notify;
 
-use crate::{crate_lookup::CratesIoStorage, rust_version::RustVersion};
+use crate::CratesIoStorage;
 
 #[derive(Debug, Clone)]
 pub struct VersionExport {

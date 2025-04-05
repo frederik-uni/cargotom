@@ -1,0 +1,14 @@
+[package]
+name = "lsp"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tower-lsp = "0.20.0"
+tokio = { workspace = true, features = ["io-std"] }
+parser = { workspace = true }
+serde_json = { workspace = true }
+webbrowser = { version = "1.0.4" }
+info-provider = { workspace = true }
+rust-version.workspace = true
+serde = { workspace = true, features = ["derive"] }

@@ -1,19 +1,15 @@
-pub mod api;
-mod crate_lookup;
-mod generate_tree;
-mod git;
-mod helper;
-mod lock;
-pub mod lsp;
-mod rust_version;
+mod analyze;
+mod context;
+mod lsp;
+mod util;
 
 use std::path::PathBuf;
 
+use ::util::crate_version;
 use clap::Parser;
-use crate_lookup::CratesIoStorage;
-use helper::crate_version;
+use crate_info::CratesIoStorage;
 use proctitle::set_title;
-use tcp_struct::Starter as _;
+use tcp_struct::Starter;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -47,6 +43,6 @@ async fn main() {
         .await
         .unwrap();
     } else {
-        lsp::main(path).await
+        lsp::main::main(path).await
     }
 }

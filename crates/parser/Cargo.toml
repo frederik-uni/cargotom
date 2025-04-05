@@ -1,0 +1,18 @@
+[package]
+name = "parser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ropey.workspace = true
+serde = { workspace = true, features = ["derive"] }
+toml.workspace = true
+serde_json.workspace = true
+taplo.workspace = true
+url.workspace = true
+difference = "2.0.0"
+tower-lsp = "0.20.0"
+info-provider = { workspace = true }
+rust-version.workspace = true
+tokio = { workspace = true, features = ["full"] }
+async-recursion = "1"

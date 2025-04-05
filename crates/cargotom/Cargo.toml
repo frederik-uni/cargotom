@@ -1,0 +1,8 @@
+[package]
+name = "cargotom"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+lsp.workspace = true

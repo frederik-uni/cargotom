@@ -1,0 +1,12 @@
+[package]
+name = "parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+url = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+toml = { workspace = true }
+serde_json = { workspace = true }
+taplo = { workspace = true }
+difference = "2.0.0"
