@@ -15,7 +15,7 @@ default-members = ["crates/cargotom"]
 resolver = "2"
 
 [workspace.dependencies]
-serde = "1.0.210"
+serde = "1.0.219"
 url = "2.5.2"
 reqwest = "0.12.8"
 tokio = "1.40.0"

@@ -3,12 +3,15 @@ use std::sync::Arc;
 
 use info_provider::api::InfoProvider;
 use parser::config::Config;
+use parser::toml::{DepSource, OptionalKey, Positioned};
 use parser::{Db, Indent};
+use rust_version::RustVersion;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
-    CodeActionProviderCapability, CodeActionResponse, Command, CompletionOptions,
+    CodeActionProviderCapability, CodeActionResponse, Command, CompletionItem, CompletionItemKind,
+    CompletionOptions, CompletionParams, CompletionResponse, CompletionTextEdit,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
     ExecuteCommandParams, Hover, HoverParams, HoverProviderCapability, InlayHint, InlayHintKind,
     InlayHintParams, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
@@ -25,6 +28,15 @@ pub struct Context {
     pub client: Client,
     db: Arc<RwLock<Db>>,
     pub info: Arc<InfoProvider>,
+}
+
+macro_rules! try_option {
+    ($expr:expr) => {
+        match $expr {
+            Some(val) => val,
+            None => return Ok(None),
+        }
+    };
 }
 
 macro_rules! crate_version {
@@ -413,6 +425,9 @@ impl LanguageServer for Context {
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        if !self.shoud_allow_user(&params.text_document.uri) {
+            return Ok(None);
+        }
         self.client
             .log_message(MessageType::INFO, "aquired read lock inlay_hint")
             .await;
@@ -459,6 +474,197 @@ impl LanguageServer for Context {
             .await
         {
             return Ok(Some(h));
+        }
+
+        Ok(None)
+    }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = params.text_document_position.text_document.uri;
+        if !self.shoud_allow_user(&uri) {
+            return Ok(None);
+        }
+
+        let lock = self.db.read().await;
+        let toml = match lock.get_toml(&uri) {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        let workspace = lock.get_workspace(&uri).and_then(|uri| lock.get_toml(uri));
+        let pos = params.text_document_position.position;
+        let pos = match lock.get_byte(&uri, pos.line as usize, pos.character as usize) {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        if let Some(dep) = toml.dependencies.iter().find(|v| v.contains(pos)) {
+            if dep.data.name.contains(pos) {
+                let end = pos.saturating_sub(dep.data.name.start as usize);
+                let slice = dep.data.name.data.get(..end).unwrap_or(&dep.data.name.data);
+                let info = self.info.search(slice).await.unwrap_or_default();
+                let start = try_option!(lock.get_offset(&uri, dep.start as usize));
+                let end = try_option!(lock.get_offset(&uri, dep.end as usize));
+
+                return Ok(Some(CompletionResponse::Array(
+                    info.into_iter()
+                        .map(|v| CompletionItem {
+                            label: v.name.clone(),
+                            kind: Some(CompletionItemKind::MODULE),
+                            detail: None,
+                            preselect: Some(v.exact_match),
+                            sort_text: None,
+                            text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                range: Range {
+                                    start: Position {
+                                        line: start.0 as u32,
+                                        character: start.1 as u32,
+                                    },
+                                    end: Position {
+                                        line: end.0 as u32,
+                                        character: end.1 as u32,
+                                    },
+                                },
+                                new_text: {
+                                    let mut dep = dep.data.clone();
+                                    dep.name.data = v.name;
+                                    if let DepSource::None = dep.source {
+                                        match workspace.is_some() {
+                                            true => {
+                                                dep.source =
+                                                    DepSource::Workspace(Default::default())
+                                            }
+                                            false => {
+                                                let ver = match lock.config.stable_version {
+                                                    true => v.max_stable_version.or(v.max_version),
+                                                    false => v.max_version.or(v.max_stable_version),
+                                                }
+                                                .unwrap_or_default();
+                                                dep.source = DepSource::Version {
+                                                    value: OptionalKey::no_key(Positioned::new(
+                                                        0, 0, ver,
+                                                    )),
+                                                    registry: None,
+                                                }
+                                            }
+                                        }
+                                    }
+                                    dep.to_string()
+                                },
+                            })),
+                            ..Default::default()
+                        })
+                        .collect(),
+                )));
+            }
+            if let DepSource::Version { value, registry } = &dep.data.source {
+                if value.value.contains(pos) {
+                    let start = try_option!(lock.get_offset(&uri, dep.start as usize));
+                    let end = try_option!(lock.get_offset(&uri, dep.end as usize));
+                    let end_ = pos.saturating_sub(value.value.start as usize + 1);
+                    let slice = value.value.data.get(..end_).unwrap_or(&value.value.data);
+                    let info = self
+                        .info
+                        .get_info(
+                            registry.as_ref().map(|v| v.value.data.as_str()),
+                            &dep.data.name.data,
+                        )
+                        .await
+                        .unwrap_or_default();
+                    return Ok(Some(CompletionResponse::Array(
+                        info.into_iter()
+                            .rev()
+                            .filter(|v| v.vers.starts_with(slice))
+                            .enumerate()
+                            .map(|(i, v)| CompletionItem {
+                                label: v.vers.clone(),
+                                kind: Some(CompletionItemKind::MODULE),
+                                detail: None,
+                                sort_text: Some(format!("{:06}", i)),
+                                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                    range: Range::new(
+                                        Position {
+                                            line: start.0 as u32,
+                                            character: start.1 as u32,
+                                        },
+                                        Position {
+                                            line: end.0 as u32,
+                                            character: end.1 as u32,
+                                        },
+                                    ),
+                                    new_text: {
+                                        let mut dep = dep.data.clone();
+                                        dep.source.set_version(OptionalKey::no_key(
+                                            Positioned::new(0, 0, v.vers),
+                                        ));
+                                        dep.to_string()
+                                    },
+                                })),
+                                ..Default::default()
+                            })
+                            .collect(),
+                    )));
+                }
+            }
+
+            if let Some(feat) = dep.data.features.data.iter().find(|v| v.contains(pos)) {
+                let end = pos.saturating_sub(feat.start as usize + 1);
+                let slice = feat.data.get(..end).unwrap_or(&feat.data);
+                let src = if let DepSource::Workspace(_) = &dep.data.source {
+                    workspace.and_then(|v| {
+                        v.dependencies
+                            .iter()
+                            .find(|v| v.data.name.data == dep.data.name.data)
+                            .map(|v| &v.data.source)
+                    })
+                } else {
+                    Some(&dep.data.source)
+                };
+                if let Some(DepSource::Version { value, registry }) = &src {
+                    let version = RustVersion::try_from(value.value.data.as_str()).ok();
+                    let features = self
+                        .info
+                        .get_info(
+                            registry.as_ref().map(|v| v.value.data.as_str()),
+                            &dep.data.name.data,
+                        )
+                        .await
+                        .unwrap_or_default()
+                        .into_iter()
+                        .rfind(|v| v.ver() == version)
+                        .map(|v| v.feature_all())
+                        .unwrap_or_default();
+
+                    let start = try_option!(lock.get_offset(&uri, value.value.start as usize));
+                    let end = try_option!(lock.get_offset(&uri, value.value.end as usize));
+                    return Ok(Some(CompletionResponse::Array(
+                        features
+                            .into_iter()
+                            .filter(|v| v.starts_with(slice))
+                            .map(|v| CompletionItem {
+                                label: v.clone(),
+                                kind: Some(CompletionItemKind::MODULE),
+                                detail: None,
+                                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                                    range: Range::new(
+                                        Position {
+                                            line: start.0 as u32,
+                                            character: start.1 as u32,
+                                        },
+                                        Position {
+                                            line: end.0 as u32,
+                                            character: end.1 as u32,
+                                        },
+                                    ),
+                                    new_text: v,
+                                })),
+                                ..Default::default()
+                            })
+                            .collect(),
+                    )));
+                }
+            }
+        }
+        if let Some(feat) = toml.features.iter().find(|v| v.contains(pos)) {
+            //TODO: features
         }
 
         Ok(None)

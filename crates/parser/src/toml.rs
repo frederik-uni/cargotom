@@ -154,7 +154,7 @@ impl Display for Dependency {
                         self.features
                             .data
                             .iter()
-                            .map(|v| v.data.clone())
+                            .map(|v| format!("\"{}\"", v.data.clone()))
                             .collect::<Vec<_>>()
                             .join(", ")
                     ));

@@ -5,6 +5,16 @@
 "lsp": {
   "cargo-tom": {
     "initialization_options": {
+      /// Search
+      "per_page": 25,
+      /// What features should be displayed on hover
+      /// All, UnusedOpt, Features,
+      "feature_display_mode": "UnusedOpt",
+      "hide_docs_info_message": false,
+      /// Sort toml on format
+      "sort_format": false,
+      /// Use stable versions in completions
+      "stable_version": true,
     }
   },
   ...
@@ -42,10 +52,10 @@
 ### Code completion
 - [ ] static manifest suggestions
 - [ ] dependency
-  - [ ] name
-  - [ ] dependency version
-  - [ ] dependency features
-  - [ ] dependency workspace
+  - [x] name
+  - [x] dependency version
+  - [x] dependency features
+  - [x] dependency workspace
   - [ ] key when version after the key `crate = "0.1.0"` => `crate = {ve"0.1.0"` to `crate = { version = "0.1.0" }`
 - [ ] features
   - [ ] local features `default = ["feature1", "feature2"]`

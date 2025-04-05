@@ -1,6 +1,5 @@
 use std::usize;
 
-use info_provider::api::ViewMode;
 use parser::{
     toml::{Dependency, Positioned},
     tree::RangeExclusive,

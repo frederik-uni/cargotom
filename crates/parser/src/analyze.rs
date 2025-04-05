@@ -178,27 +178,30 @@ impl Db {
 }
 
 fn to_diagnostics(hide_docs_info_message: bool, items: Vec<Warning>) -> Vec<Diagnostic> {
-    let mut d =match hide_docs_info_message{
-        true => vec![Diagnostic {
-        range: Range {
-                start: Position {
-                    line: 0,
-                    character: 0,
-                },
-                end: Position {
-                    line: 1,
-                    character: 0,
-                }},
-        severity: Some(DiagnosticSeverity::INFORMATION),
-        code: None,
-        code_description: None,
-        source: None,
-        message: "\nThe first line of every Cargo.toml has code actions that will open docs/issues for the cargotom lsp.\n\n To hide this message please set hide_docs_info_message. \n\nFor further information please check out the docs".to_owned(),
-        related_information: None,
-        tags: None,
-        data: None,
-    }],
-        false => vec![]};
+    let mut d = match hide_docs_info_message {
+        false => vec![
+            Diagnostic {
+                range: Range {
+                        start: Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: 1,
+                            character: 0,
+                        }},
+                severity: Some(DiagnosticSeverity::INFORMATION),
+                code: None,
+                code_description: None,
+                source: None,
+                message: "\nThe first line of every Cargo.toml has code actions that will open docs/issues for the cargotom lsp.\n\n To hide this message please set hide_docs_info_message. \n\nFor further information please check out the docs".to_owned(),
+                related_information: None,
+                tags: None,
+                data: None,
+            }
+        ],
+        true => vec![],
+    };
     for item in items {
         d.push(Diagnostic {
             range: Range {

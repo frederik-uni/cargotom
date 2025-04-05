@@ -203,7 +203,7 @@ async fn search(client: &Client, per_page: usize, name: &str) -> Result<Vec<Crat
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Crate {
-    exact_match: bool,
+    pub exact_match: bool,
     pub name: String,
     pub description: Option<String>,
     pub max_stable_version: Option<String>,

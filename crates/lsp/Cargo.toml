@@ -8,7 +8,7 @@ tower-lsp = "0.20.0"
 tokio = { workspace = true, features = ["io-std"] }
 parser = { workspace = true }
 serde_json = { workspace = true }
-webbrowser = "0.8.15"
+webbrowser = { version = "1.0.4" }
 info-provider = { workspace = true }
 rust-version.workspace = true
 serde = { workspace = true, features = ["derive"] }
