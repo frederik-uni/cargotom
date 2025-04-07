@@ -16,8 +16,12 @@ use crate::{api::Crate, downloader::download_update, InfoProvider};
 impl InfoProvider {
     pub async fn search_local(&self, name: &str) -> Vec<Crate> {
         let lock = self.data.read().await;
-        lock.iter()
+        let mut v: Vec<_> = lock
+            .iter()
             .filter(|v| v.name.starts_with(name))
+            .collect::<Vec<_>>();
+        v.sort_by(|a, b| b.order.cmp(&a.order));
+        v.into_iter()
             .map(|v| Crate {
                 exact_match: v.name == name,
                 name: v.name.clone(),
