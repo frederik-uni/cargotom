@@ -67,6 +67,8 @@ impl LanguageServer for Context {
             .await;
         lock.config = config;
         self.info.set_per_page(lock.config.per_page).await;
+        self.info.set_offline(lock.config.offline).await;
+
         lock.sel = Some(c);
         for v in params.workspace_folders.unwrap_or_default() {
             let mut root = v.uri;
