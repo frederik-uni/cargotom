@@ -14,6 +14,7 @@ rust-version.workspace = true
 zstd = "0.13.3"
 tar = "0.4"
 byteorder.workspace = true
+html2md.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

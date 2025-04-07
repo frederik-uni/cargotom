@@ -237,6 +237,7 @@ async fn readme(client: &Client, crate_name: &str, version: &str) -> reqwest::Re
         .await?
         .text()
         .await
+        .map(|v| html2md::parse_html(&v))
 }
 
 async fn search(client: &Client, per_page: usize, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
