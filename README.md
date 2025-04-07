@@ -1,6 +1,5 @@
-# cargotom
+# CargoTom[l]
 ## Config
--todo: view mode features, per_page
 ```json
 "lsp": {
   "cargo-tom": {
@@ -33,6 +32,7 @@
 - [x] "Expand dependency specification" => This will convert from `"0.1.0"` to `{ version = "0.1.0" }`
 - [x] "Collapse dependency specification" => This will convert from `{ version = "0.1.0" }` to `"0.1.0`
 - [x] "Open Docs" => opens docs.rs/...
+- [x] "Open Homepage" => opens ???...
 - [x] "Open crates.io" => opens crates.io/...
 - [x] "Open Src code" => opens src code on github
 - [x] "Upgrade" => will upgrade the dependency version to the latest version
@@ -49,13 +49,17 @@
 ### Hover
 - [x] available versions
 - [x] available features
-- [x] crate description
+- [x] crate description(README)
 - [ ] Static
 
 ### Code completion
 - [ ] static manifest suggestions
 - [ ] dependency
   - [x] name
+    - [ ] filter existing
+    - [ ] add workspace crates
+    - [ ] sort
+    - [ ] starts with, contains, starts_with_segment, treat - and _ the same
   - [x] dependency version
   - [x] dependency features
   - [x] dependency workspace
@@ -75,6 +79,7 @@
   - [x] check for feature duplicate
   - [x] check for dep duplicate
   - [x] check if version is set & dep in workspace
+  - [ ] better target support
 - [ ] Features
   - [ ] check for feature duplicate
   - [ ] check if `dep:crate_name` is optional
@@ -85,3 +90,5 @@
 
 ## Plans
 - feature suggestions for git dependencies and local dependencies
+- use local readmes if available
+- make cache persistent

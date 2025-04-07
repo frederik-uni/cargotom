@@ -703,7 +703,7 @@ impl LanguageServer for Context {
                                             character: end.1 as u32,
                                         },
                                     ),
-                                    new_text: v,
+                                    new_text: format!("\"{v}\""),
                                 })),
                                 ..Default::default()
                             })
