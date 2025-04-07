@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 pub struct RustVersion {
     major: Option<u32>,
     minor: Option<u32>,
-    patch: Option<VersionString>,
+    patch: Option<u32>,
+    pre: Option<String>,
+    build: Option<String>,
 }
 
 impl RustVersion {
@@ -17,115 +19,12 @@ impl RustVersion {
     pub fn minor(&self) -> Option<u32> {
         self.minor
     }
-    pub fn patch(&self) -> Option<&VersionString> {
+    pub fn patch(&self) -> Option<&u32> {
         self.patch.as_ref()
     }
 
-    pub fn is_patch_int(&self) -> bool {
-        match &self.patch {
-            Some(v) => {
-                let items = v.int_or_string();
-                if items.len() == 1 {
-                    match items.first() {
-                        Some(IntOrString::Int(_)) => true,
-                        _ => false,
-                    }
-                } else {
-                    false
-                }
-            }
-            None => true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct VersionString(String);
-
-impl VersionString {
-    fn int_or_string(&self) -> Vec<IntOrString> {
-        let mut out = vec![];
-        let mut builder = vec![];
-        let mut number = false;
-        let build = |number, builder: &mut Vec<char>, out: &mut Vec<IntOrString>| {
-            if !builder.is_empty() {
-                let val = builder.drain(..).collect::<String>();
-                match number {
-                    true => out.push(IntOrString::Int(val.parse().unwrap())),
-                    false => out.push(IntOrString::String(val)),
-                }
-            }
-        };
-        for char in self.0.chars() {
-            if number != char.is_ascii_digit() {
-                build(number, &mut builder, &mut out);
-                number = !number;
-            }
-            builder.push(char);
-        }
-        build(number, &mut builder, &mut out);
-        out
-    }
-}
-
-#[derive(PartialEq, Eq)]
-enum IntOrString {
-    Int(u64),
-    String(String),
-}
-
-impl PartialOrd for IntOrString {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for IntOrString {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (IntOrString::Int(a), IntOrString::Int(b)) => a.cmp(b),
-            (IntOrString::Int(_), IntOrString::String(_)) => Ordering::Greater,
-            (IntOrString::String(_), IntOrString::Int(_)) => Ordering::Less,
-            (IntOrString::String(a), IntOrString::String(b)) => a.cmp(b),
-        }
-    }
-}
-
-impl Ord for VersionString {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let mut iter_a = self.int_or_string().into_iter();
-        let mut iter_b = other.int_or_string().into_iter();
-        loop {
-            match (iter_a.next(), iter_b.next()) {
-                (Some(elem_a), Some(elem_b)) => {
-                    let cmp_result = elem_a.cmp(&elem_b);
-                    if cmp_result != Ordering::Equal {
-                        return cmp_result;
-                    }
-                }
-                (Some(_), None) => return Ordering::Greater,
-                (None, Some(_)) => return Ordering::Less,
-                (None, None) => return Ordering::Equal,
-            }
-        }
-    }
-}
-
-impl PartialOrd for VersionString {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Display for VersionString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl From<String> for VersionString {
-    fn from(value: String) -> Self {
-        Self(value)
+    pub fn is_pre_release(&self) -> bool {
+        self.pre.is_some()
     }
 }
 
@@ -149,6 +48,18 @@ impl Ord for RustVersion {
             (None, Some(_)) => Ordering::Greater, // None > Some patch
             (None, None) => Ordering::Equal,
         })
+        .then_with(|| match (&self.pre, &other.pre) {
+            (Some(self_pre), Some(other_pre)) => self_pre.cmp(other_pre),
+            (Some(_), None) => Ordering::Less, // pre-release < no pre-release
+            (None, Some(_)) => Ordering::Greater, // no pre-release > pre-release
+            (None, None) => Ordering::Equal,
+        })
+        .then_with(|| match (&self.build, &other.build) {
+            (Some(self_build), Some(other_build)) => self_build.cmp(other_build),
+            (Some(_), None) => Ordering::Less, // Arbitrary decision; could also be Equal
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        })
     }
 }
 
@@ -163,26 +74,46 @@ impl Display for RustVersion {
         if let Some(major) = &self.major {
             if let Some(minor) = &self.minor {
                 if let Some(path) = &self.patch {
-                    write!(f, "{}.{}.{}", major, minor, path)
+                    write!(f, "{}.{}.{}", major, minor, path)?;
                 } else {
-                    write!(f, "{}.{}", major, minor)
+                    write!(f, "{}.{}", major, minor)?;
                 }
             } else {
-                write!(f, "{}", major)
+                write!(f, "{}", major)?;
             }
         } else {
-            write!(f, "*")
+            write!(f, "*")?;
         }
+        if let Some(pre) = &self.pre {
+            write!(f, "-{}", pre)?;
+        }
+
+        if let Some(build) = &self.build {
+            write!(f, "+{}", build)?;
+        }
+        Ok(())
     }
 }
 
 impl TryFrom<&str> for RustVersion {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let items = value.splitn(3, '.').collect::<Vec<_>>();
+        let (version_part, build) = match value.split_once('+') {
+            Some((ver, b)) => (ver, Some(b.to_string())),
+            None => (value, None),
+        };
+
+        let (core_part, pre) = match version_part.split_once('-') {
+            Some((core, p)) => (core, Some(p.to_string())),
+            None => (version_part, None),
+        };
+        let items = core_part.splitn(3, '.').collect::<Vec<_>>();
+
         let mut se = Self {
             major: None,
             minor: None,
             patch: None,
+            pre,
+            build,
         };
         match items.len() {
             0 => {}
@@ -196,7 +127,7 @@ impl TryFrom<&str> for RustVersion {
             3 => {
                 se.major = Some(items[0].to_string().parse()?);
                 se.minor = Some(items[1].to_string().parse()?);
-                se.patch = Some(items[2].to_string().into());
+                se.patch = Some(items[2].to_string().parse()?);
             }
             _ => {}
         };
@@ -208,13 +139,20 @@ impl TryFrom<&str> for RustVersion {
 
 impl PartialEq for RustVersion {
     fn eq(&self, other: &Self) -> bool {
-        if ((other.major.is_some() && self.major == other.major) || other.major.is_none())
-            && ((other.minor.is_some() && self.minor == other.minor) || other.minor.is_none())
-            && ((other.patch.is_some() && self.patch == other.patch) || other.patch.is_none())
-        {
-            return true;
+        fn field_eq<T: PartialEq>(a: &Option<T>, b: &Option<T>) -> bool {
+            match (a, b) {
+                (Some(a), Some(b)) => a == b,
+                (None, None) => true,
+                (None, Some(_)) => true,
+                (Some(_), None) => true,
+            }
         }
-        false
+
+        field_eq(&self.major, &other.major)
+            && field_eq(&self.minor, &other.minor)
+            && field_eq(&self.patch, &other.patch)
+            && field_eq(&self.pre, &other.pre)
+            && field_eq(&self.build, &other.build)
     }
 }
 impl Eq for RustVersion {}

@@ -125,7 +125,7 @@ impl Db {
                                 if let Some((info, _)) = versions
                                     .iter()
                                     .filter(|v| match self.config.stable_version {
-                                        true => v.1.is_patch_int(),
+                                        true => !v.1.is_pre_release(),
                                         false => true,
                                     })
                                     .rfind(|(_, v)| v > &ver)
