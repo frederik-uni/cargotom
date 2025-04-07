@@ -44,8 +44,18 @@ impl Db {
                     }
                 }
             }
+            let targets: Vec<_> = toml
+                .data
+                .target
+                .iter()
+                .map(|v| v.data.to_string())
+                .collect();
+            let targets = targets.join(" ");
             names
-                .entry(format!("{}{:?}", toml.data.name.data, toml.data.kind))
+                .entry(format!(
+                    "{}{:?}{}",
+                    toml.data.name.data, toml.data.kind, targets
+                ))
                 .or_default()
                 .push(toml)
         }
