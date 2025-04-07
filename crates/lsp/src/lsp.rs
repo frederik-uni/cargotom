@@ -508,12 +508,13 @@ impl LanguageServer for Context {
 
                 return Ok(Some(CompletionResponse::Array(
                     info.into_iter()
-                        .map(|v| CompletionItem {
+                        .enumerate()
+                        .map(|(i, v)| CompletionItem {
                             label: v.name.clone(),
                             kind: Some(CompletionItemKind::MODULE),
                             detail: v.description,
                             preselect: Some(v.exact_match),
-                            sort_text: None,
+                            sort_text: Some(format!("{:06}", i)),
                             text_edit: Some(CompletionTextEdit::Edit(TextEdit {
                                 range: Range {
                                     start: Position {
