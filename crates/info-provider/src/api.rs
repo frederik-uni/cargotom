@@ -6,7 +6,9 @@ use std::{
 use reqwest::{header::USER_AGENT, Client};
 use rust_version::RustVersion;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, Notify, RwLock};
+use tokio::sync::{Notify, RwLock};
+
+use crate::InfoProvider;
 
 pub enum CacheItem<T> {
     Pending(Arc<Notify>),
@@ -21,25 +23,7 @@ pub enum CacheItemOut<T> {
     Ready(Vec<T>),
 }
 
-pub struct InfoProvider {
-    client: Arc<reqwest::Client>,
-    registry: &'static str,
-    info_cache: Arc<Mutex<HashMap<String, HashMap<String, CacheItem<Root1>>>>>,
-    search_cache: Arc<Mutex<HashMap<String, CacheItem<Crate>>>>,
-    per_page: RwLock<usize>,
-}
-
 impl InfoProvider {
-    pub fn new(per_page: usize) -> Self {
-        Self {
-            client: Arc::new(reqwest::Client::new()),
-            registry: "https://index.crates.io/",
-            info_cache: Default::default(),
-            search_cache: Default::default(),
-            per_page: RwLock::new(per_page),
-        }
-    }
-
     pub async fn set_per_page(&self, per_page: usize) {
         *self.per_page.write().await = per_page;
         self.search_cache.lock().await.drain();

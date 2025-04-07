@@ -9,7 +9,7 @@ mod tree_to_struct;
 use std::{collections::HashMap, fs::read_to_string, path::PathBuf, sync::Arc};
 
 use config::Config;
-use info_provider::api::InfoProvider;
+use info_provider::InfoProvider;
 use ropey::Rope;
 use structs::lock::{CargoLockRaw, Package};
 use tokio::sync::RwLock;
