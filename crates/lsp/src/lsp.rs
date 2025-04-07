@@ -682,8 +682,8 @@ impl LanguageServer for Context {
                         .map(|v| v.feature_all())
                         .unwrap_or_default();
 
-                    let start = try_option!(lock.get_offset(&uri, value.value.start as usize));
-                    let end = try_option!(lock.get_offset(&uri, value.value.end as usize));
+                    let start = try_option!(lock.get_offset(&uri, feat.start as usize));
+                    let end = try_option!(lock.get_offset(&uri, feat.end as usize));
                     return Ok(Some(CompletionResponse::Array(
                         features
                             .into_iter()

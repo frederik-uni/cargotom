@@ -49,7 +49,7 @@
 ### Hover
 - [x] available versions
 - [x] available features
-- [ ] crate description
+- [x] crate description
 - [ ] Static
 
 ### Code completion

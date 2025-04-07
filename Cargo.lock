@@ -165,7 +165,7 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cargotom"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "lsp",
  "tokio",
@@ -815,7 +815,7 @@ dependencies = [
 
 [[package]]
 name = "info-provider"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -983,7 +983,7 @@ dependencies = [
 
 [[package]]
 name = "lsp"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "info-provider",
  "parser",
@@ -1216,7 +1216,7 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "async-recursion",
  "difference",
@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "rust-version"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "serde",
 ]
