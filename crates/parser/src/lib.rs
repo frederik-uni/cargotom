@@ -73,6 +73,15 @@ pub enum Indent {
 }
 
 impl Db {
+    pub fn get_lock(&self, uri: &Uri) -> Option<&CargoLockRaw> {
+        let mut file = self.workspaces.get(uri).unwrap_or(uri).clone();
+        if let Ok(mut v) = file.path_segments_mut() {
+            v.pop();
+            v.push("Cargo.lock");
+        }
+        self.locks.get(&file)
+    }
+
     pub async fn hints(&self, uri: &Uri) -> Option<Vec<((usize, usize), Package)>> {
         let toml = self.tomls.get(uri)?;
         let mut root_file = match self.workspaces.get(uri) {

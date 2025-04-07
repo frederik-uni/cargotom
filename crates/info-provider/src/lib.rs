@@ -10,6 +10,7 @@ mod local;
 pub struct InfoProvider {
     client: Arc<reqwest::Client>,
     registry: &'static str,
+    readme_cache: Arc<Mutex<HashMap<(String, String), CacheItem<String>>>>,
     info_cache: Arc<Mutex<HashMap<String, HashMap<String, CacheItem<Root1>>>>>,
     search_cache: Arc<Mutex<HashMap<String, CacheItem<Crate>>>>,
     per_page: RwLock<usize>,
@@ -33,6 +34,7 @@ impl InfoProvider {
             registry: "https://index.crates.io/",
             info_cache: Default::default(),
             search_cache: Default::default(),
+            readme_cache: Default::default(),
             per_page: RwLock::new(per_page),
         }
     }

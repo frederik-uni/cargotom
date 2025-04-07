@@ -44,7 +44,7 @@ pub struct Package {
     /// version of the package
     pub version: RustVersion,
     /// source of the package
-    source: Option<Source>,
+    pub source: Option<Source>,
     /// checksum of the package
     checksum: Option<String>,
     /// dependencies of the package
@@ -83,6 +83,7 @@ impl Package {
             _ => false,
         }
     }
+
     pub fn is_git(&self) -> bool {
         match self.source {
             Some(Source::Git { .. }) => true,
@@ -98,7 +99,7 @@ impl Package {
 }
 
 #[derive(Debug, Clone)]
-enum Source {
+pub enum Source {
     Registry(String),
     Git {
         url: String,

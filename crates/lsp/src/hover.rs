@@ -1,7 +1,8 @@
 use std::usize;
 
 use parser::{
-    toml::{Dependency, Positioned},
+    structs::lock::Source,
+    toml::{DepSource, Dependency, Positioned},
     tree::RangeExclusive,
     Db,
 };
@@ -69,11 +70,25 @@ impl Context {
         if range.contains(offset) {
             let start = lock.get_offset(&uri, range.start as usize)?;
             let end = lock.get_offset(&uri, range.end as usize)?;
+            let name = &dep.data.name.data;
+            let lock = lock.get_lock(uri)?.packages();
+            let lock = lock.get(name)?.first()?;
+            let mut use_ = false;
+            if let Some(Source::Registry(s)) = &lock.source {
+                use_ = s == "https://github.com/rust-lang/crates.io-index";
+            }
+            if !use_ {
+                return None;
+            }
+            let content = self
+                .info
+                .get_readme_api(&dep.data.name.data, &lock.version.to_string())
+                .await?;
 
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,
-                    value: "name".to_owned(),
+                    value: content,
                 }),
                 range: Some(Range {
                     start: Position {
@@ -103,7 +118,7 @@ impl Context {
         let range = RangeExclusive::from(&dep.data.features);
         let vers = RustVersion::try_from(
             match &dep.data.source {
-                parser::toml::DepSource::Version { value, registry } => Some(&value.value.data),
+                parser::toml::DepSource::Version { value, .. } => Some(&value.value.data),
                 parser::toml::DepSource::Workspace(_) => {
                     let workspace_uri = lock.get_workspace(uri)?;
                     let workspace = lock.get_toml(workspace_uri)?;

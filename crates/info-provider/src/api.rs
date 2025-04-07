@@ -24,6 +24,60 @@ pub enum CacheItemOut<T> {
 }
 
 impl InfoProvider {
+    pub async fn get_readme_api(&self, crate_name: &str, version: &str) -> Option<String> {
+        let key = (crate_name.to_owned(), version.to_owned());
+        let fetch = {
+            let lock = self.readme_cache.lock().await;
+            match lock.get(&key) {
+                Some(v) => match v {
+                    CacheItem::Pending(n) => Some(n.clone()),
+                    CacheItem::Ready(items) => return items.first().cloned(),
+                    CacheItem::Error(_) => unreachable!(),
+                },
+                None => None,
+            }
+        };
+        let n = match fetch {
+            Some(n) => n,
+            None => {
+                let n = Arc::new(Notify::new());
+                let notify = n.clone();
+                {
+                    let mut lock = self.readme_cache.lock().await;
+                    lock.insert(key.clone(), CacheItem::Pending(notify.clone()));
+                }
+                let client = self.client.clone();
+                let key = key.clone();
+                let readme_cache = self.readme_cache.clone();
+                tokio::spawn(async move {
+                    let info = readme(&client, &key.0, &key.1).await;
+                    let mut lock = readme_cache.lock().await;
+                    match &info {
+                        Ok(items) => {
+                            lock.insert(key, CacheItem::Ready(vec![items.clone()]));
+                        }
+                        Err(_) => {
+                            lock.remove(&key);
+                        }
+                    }
+                    notify.notify_waiters();
+                });
+
+                n
+            }
+        };
+        n.notified().await;
+        let lock = self.readme_cache.lock().await;
+        match lock.get(&key) {
+            Some(v) => match v {
+                CacheItem::Pending(_) => None,
+                CacheItem::Ready(items) => items.first().cloned(),
+                CacheItem::Error(_) => unreachable!(),
+            },
+            None => None,
+        }
+    }
+
     pub async fn get_crate_repository_api(&self, crate_name: &str) -> Option<String> {
         let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
 
@@ -172,6 +226,17 @@ impl InfoProvider {
             None => return Ok(vec![]),
         }
     }
+}
+
+async fn readme(client: &Client, crate_name: &str, version: &str) -> reqwest::Result<String> {
+    let url = format!("https://static.crates.io/readmes/{crate_name}/{crate_name}-{version}.html");
+    client
+        .get(&url)
+        .header(USER_AGENT, "zed")
+        .send()
+        .await?
+        .text()
+        .await
 }
 
 async fn search(client: &Client, per_page: usize, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
