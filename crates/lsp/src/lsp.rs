@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -16,7 +17,7 @@ use tower_lsp::lsp_types::{
     DocumentFormattingParams, ExecuteCommandParams, Hover, HoverParams, HoverProviderCapability,
     InlayHint, InlayHintKind, InlayHintParams, MessageType, OneOf, Position, Range,
     ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url,
+    TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url, WorkspaceEdit,
     WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
 use tower_lsp::{
@@ -373,6 +374,68 @@ impl LanguageServer for Context {
                     "crates.io",
                     format!("https://crates.io/crates/{name}"),
                 );
+            } else if let DepSource::Workspace(range) = &dep.data.source {
+                let workspace_uri = lock.get_workspace(&uri);
+                let workspace = workspace_uri.as_ref().and_then(|v| lock.get_toml(v));
+                if let (Some(workspace_uri), Some(workspace)) = (workspace_uri, &workspace) {
+                    if workspace
+                        .dependencies
+                        .iter()
+                        .find(|v| v.data.name.data == dep.data.name.data)
+                        .is_none()
+                    {
+                        if let Ok(Some(info)) = self
+                            .info
+                            .get_info(None, &dep.data.name.data)
+                            .await
+                            .map(|v| {
+                                v.into_iter().rfind(|v| match lock.config.stable_version {
+                                    false => true,
+                                    true => v.ver().map(|v| v.is_pre_release()) == Some(false),
+                                })
+                            })
+                        {
+                            if let Some(last) = workspace.dependencies.last() {
+                                let line = lock.get_line(&workspace_uri, last.end as usize);
+                                if let Some(line) = line {
+                                    actions.insert(
+                                        0,
+                                        CodeActionOrCommand::CodeAction(CodeAction {
+                                            title: "Add to workspace".to_owned(),
+                                            edit: Some(WorkspaceEdit {
+                                                changes: Some(
+                                                    vec![(
+                                                        workspace_uri.to_owned(),
+                                                        vec![TextEdit {
+                                                            range: Range::new(
+                                                                Position {
+                                                                    line: line as u32 + 1,
+                                                                    character: 0,
+                                                                },
+                                                                Position {
+                                                                    line: line as u32 + 1,
+                                                                    character: 0,
+                                                                },
+                                                            ),
+                                                            new_text: format!(
+                                                                "{} = \"{}\"",
+                                                                dep.data.name.data, info.vers
+                                                            ),
+                                                        }],
+                                                    )]
+                                                    .into_iter()
+                                                    .collect::<HashMap<_, _>>(),
+                                                ),
+                                                ..Default::default()
+                                            }),
+                                            ..Default::default()
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
             if let Some(a) = self.dep_actions(&uri, dep, &lock) {
                 actions.extend(a.into_iter().map(CodeActionOrCommand::CodeAction));
@@ -477,7 +540,7 @@ impl LanguageServer for Context {
             return Ok(None);
         }
         self.client
-            .log_message(MessageType::INFO, "aquired read lock inlay_hint")
+            .log_message(MessageType::INFO, "aquire read lock inlay_hint")
             .await;
         let v = self
             .db
@@ -499,7 +562,7 @@ impl LanguageServer for Context {
             })
             .collect();
         self.client
-            .log_message(MessageType::INFO, "aquired read lock code_action")
+            .log_message(MessageType::INFO, "aquired read lock inlay hint")
             .await;
         Ok(Some(v))
     }
@@ -510,11 +573,11 @@ impl LanguageServer for Context {
             return Ok(None);
         }
         self.client
-            .log_message(MessageType::INFO, "aquire read lock code_action")
+            .log_message(MessageType::INFO, "aquire read lock hover")
             .await;
         let lock = self.db.read().await;
         self.client
-            .log_message(MessageType::INFO, "aquired read lock code_action")
+            .log_message(MessageType::INFO, "aquired read lock hover")
             .await;
 
         if let Some(h) = self

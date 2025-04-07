@@ -40,7 +40,7 @@
 - [x] "Update All" => will run `cargo update`
 - [x] toggle optional dependency
 - [ ] make dependency optional if in feature
-- [ ] fix missing in workspace
+- [x] fix missing in workspace
 
 
 ### Inlay Hint

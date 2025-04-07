@@ -165,7 +165,7 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cargotom"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "lsp",
  "tokio",
@@ -526,11 +526,10 @@ dependencies = [
 [[package]]
 name = "html2md"
 version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cff9891f2e0d9048927fbdfc28b11bf378f6a93c7ba70b23d0fbee9af6071b4"
+source = "git+https://gitlab.com/o0Frederik0o/html2md#a50c50b5b98d4360257002b23d967471001ef0df"
 dependencies = [
  "html5ever",
- "jni 0.19.0",
+ "jni",
  "lazy_static",
  "markup5ever_rcdom",
  "percent-encoding",
@@ -815,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "info-provider"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -850,20 +849,6 @@ name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
-
-[[package]]
-name = "jni"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6df18c2e3db7e453d3c6ac5b3e9d5182664d28788126d39b91f2d1e22b017ec"
-dependencies = [
- "cesu8",
- "combine",
- "jni-sys",
- "log",
- "thiserror",
- "walkdir",
-]
 
 [[package]]
 name = "jni"
@@ -983,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "lsp"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "info-provider",
  "parser",
@@ -1216,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "async-recursion",
  "difference",
@@ -1491,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "rust-version"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "serde",
 ]
@@ -2348,7 +2333,7 @@ checksum = "d5df295f8451142f1856b1bd86a606dfe9587d439bc036e319c827700dbd555e"
 dependencies = [
  "core-foundation 0.10.0",
  "home",
- "jni 0.21.1",
+ "jni",
  "log",
  "ndk-context",
  "objc2",
