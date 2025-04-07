@@ -302,12 +302,6 @@ impl LanguageServer for Context {
                     actions_last.push(CodeActionOrCommand::CodeAction(action));
                 };
 
-                open_page(
-                    &mut actions_last,
-                    "Docs",
-                    format!("https://docs.rs/{name}/{version}/"),
-                );
-
                 if lock.config.offline {
                     let info = self.info.get_local(name).await;
                     if let Some(info) = info {
@@ -322,6 +316,11 @@ impl LanguageServer for Context {
                         }
                     }
                 } else {
+                    open_page(
+                        &mut actions_last,
+                        "Documentation",
+                        format!("https://docs.rs/{name}/{version}/"),
+                    );
                     let action = CodeAction {
                         title: "Open Source".to_string(),
                         kind: Some(CodeActionKind::EMPTY),
