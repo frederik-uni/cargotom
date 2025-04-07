@@ -287,46 +287,61 @@ impl LanguageServer for Context {
                 let version = &value.value.data;
 
                 let name = &dep.data.name.data;
-                let action = CodeAction {
-                    title: "Open Docs".to_string(),
-                    kind: Some(CodeActionKind::EMPTY),
-                    command: Some(Command {
-                        title: "Open Docs".to_string(),
-                        command: "open_url".to_string(),
-                        arguments: Some(vec![serde_json::Value::String(format!(
-                            "https://docs.rs/{name}/{version}/"
-                        ))]),
-                    }),
-                    ..CodeAction::default()
+
+                let open_page = |actions_last: &mut Vec<CodeActionOrCommand>, name, url| {
+                    let action = CodeAction {
+                        title: format!("Open {name}"),
+                        kind: Some(CodeActionKind::EMPTY),
+                        command: Some(Command {
+                            title: format!("Open {name}"),
+                            command: "open_url".to_string(),
+                            arguments: Some(vec![serde_json::Value::String(url)]),
+                        }),
+                        ..CodeAction::default()
+                    };
+                    actions_last.push(CodeActionOrCommand::CodeAction(action));
                 };
-                actions_last.push(CodeActionOrCommand::CodeAction(action));
-                let action = CodeAction {
-                    title: "Open Source".to_string(),
-                    kind: Some(CodeActionKind::EMPTY),
-                    command: Some(Command {
+
+                open_page(
+                    &mut actions_last,
+                    "Docs",
+                    format!("https://docs.rs/{name}/{version}/"),
+                );
+
+                if lock.config.offline {
+                    let info = self.info.get_local(name).await;
+                    if let Some(info) = info {
+                        if let Some(repo) = info.repository {
+                            open_page(&mut actions_last, "Repository", repo);
+                        }
+                        if let Some(documentation) = info.documentation {
+                            open_page(&mut actions_last, "Documentation", documentation);
+                        }
+                        if let Some(homepage) = info.homepage {
+                            open_page(&mut actions_last, "Homepage", homepage);
+                        }
+                    }
+                } else {
+                    let action = CodeAction {
                         title: "Open Source".to_string(),
-                        command: "open-src".to_string(),
-                        arguments: Some(vec![
-                            serde_json::Value::String(name.clone()),
-                            serde_json::Value::String(version.clone()),
-                        ]),
-                    }),
-                    ..CodeAction::default()
-                };
-                actions_last.push(CodeActionOrCommand::CodeAction(action));
-                let action = CodeAction {
-                    title: "Open crates.io".to_string(),
-                    kind: Some(CodeActionKind::EMPTY),
-                    command: Some(Command {
-                        title: "Open crates.io".to_string(),
-                        command: "open_url".to_string(),
-                        arguments: Some(vec![serde_json::Value::String(format!(
-                            "https://crates.io/crates/{name}"
-                        ))]),
-                    }),
-                    ..CodeAction::default()
-                };
-                actions_last.push(CodeActionOrCommand::CodeAction(action));
+                        kind: Some(CodeActionKind::EMPTY),
+                        command: Some(Command {
+                            title: "Open Source".to_string(),
+                            command: "open-src".to_string(),
+                            arguments: Some(vec![
+                                serde_json::Value::String(name.clone()),
+                                serde_json::Value::String(version.clone()),
+                            ]),
+                        }),
+                        ..CodeAction::default()
+                    };
+                    actions_last.push(CodeActionOrCommand::CodeAction(action));
+                }
+                open_page(
+                    &mut actions_last,
+                    "crates.io",
+                    format!("https://crates.io/crates/{name}"),
+                );
             }
             if let Some(a) = self.dep_actions(&uri, dep, &lock) {
                 actions.extend(a.into_iter().map(CodeActionOrCommand::CodeAction));

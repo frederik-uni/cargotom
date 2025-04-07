@@ -31,6 +31,11 @@ impl InfoProvider {
             })
             .collect()
     }
+
+    pub async fn get_local(&self, name: &str) -> Option<OfflineCrate> {
+        let lock = self.data.read().await;
+        lock.iter().find(|v| v.name == name).cloned()
+    }
 }
 
 pub async fn init(offline: Arc<RwLock<bool>>, data: Arc<RwLock<Vec<OfflineCrate>>>, root: PathBuf) {
@@ -108,7 +113,7 @@ pub fn updater(offline: Arc<RwLock<bool>>, root: PathBuf, data: Arc<RwLock<Vec<O
     });
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OfflineCrate {
     pub name: String,
     pub repository: Option<String>,
