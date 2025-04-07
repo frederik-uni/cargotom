@@ -15,9 +15,8 @@ const OWNER: &str = "frederik-uni";
 const REPO: &str = "crates.io-dump-minfied";
 const ASSET_NAME: &str = "data.tar.zst";
 
-const STORAGE_DIR: &str = "./data";
-const CURRENT_VERSION_FILE: &str = "./data/current";
-static DOWNLOAD_LOCK_FILE: &str = "./data/download.lock";
+const CURRENT_VERSION_FILE: &str = "current";
+const DOWNLOAD_LOCK_FILE: &str = "download.lock";
 
 #[derive(Debug, Deserialize)]
 struct Release {
@@ -31,14 +30,13 @@ struct Asset {
     browser_download_url: String,
 }
 
-fn check_lock_file() -> bool {
-    let p = Path::new(DOWNLOAD_LOCK_FILE);
-    if p.exists() {
-        if let Ok(v) = p.metadata() {
+fn check_lock_file(download_lock_file: &Path) -> bool {
+    if download_lock_file.exists() {
+        if let Ok(v) = download_lock_file.metadata() {
             if let Ok(v) = v.created() {
                 if let Ok(duration_since_epoch) = v.duration_since(UNIX_EPOCH) {
                     if duration_since_epoch > Duration::new(900, 0) {
-                        if let Err(e) = fs::remove_file(DOWNLOAD_LOCK_FILE) {
+                        if let Err(e) = fs::remove_file(download_lock_file) {
                             eprintln!("Failed to delete lock file: {}", e);
                         }
                         return false;
@@ -52,16 +50,17 @@ fn check_lock_file() -> bool {
     }
 }
 
-pub async fn download_update() -> Result<bool, anyhow::Error> {
-    while check_lock_file() {
+pub async fn download_update(root: &Path) -> Result<bool, anyhow::Error> {
+    let download_lock_file = root.join(DOWNLOAD_LOCK_FILE);
+
+    while check_lock_file(&download_lock_file) {
         sleep(Duration::from_secs(15 * 60)).await;
     }
 
-    let path = Path::new(DOWNLOAD_LOCK_FILE);
-    if let Some(p) = path.parent() {
+    if let Some(p) = download_lock_file.parent() {
         fs::create_dir_all(p)?;
     }
-    File::create(DOWNLOAD_LOCK_FILE)?;
+    File::create(&download_lock_file)?;
     let client = Client::new();
 
     let url = format!(
@@ -78,10 +77,10 @@ pub async fn download_update() -> Result<bool, anyhow::Error> {
         .await?;
 
     let latest_version = &release.tag_name;
-    let current_version = fs::read_to_string(CURRENT_VERSION_FILE).unwrap_or_default();
+    let current_version = fs::read_to_string(root.join(CURRENT_VERSION_FILE)).unwrap_or_default();
 
     if current_version.trim() == latest_version.trim() {
-        fs::remove_file(DOWNLOAD_LOCK_FILE)?;
+        fs::remove_file(&download_lock_file)?;
         return Ok(false);
     }
 
@@ -91,17 +90,16 @@ pub async fn download_update() -> Result<bool, anyhow::Error> {
         .find(|a| a.name == ASSET_NAME)
         .ok_or(anyhow!("Main asset not found"))?;
 
-    let tmp_dir = Path::new(STORAGE_DIR).join("tmp");
+    let tmp_dir = Path::new(root).join("tmp");
     fs::create_dir_all(&tmp_dir)?;
 
     let asset_path = tmp_dir.join(ASSET_NAME);
 
     download(&client, &asset.browser_download_url, &asset_path).await?;
 
-    let release_dir = Path::new(STORAGE_DIR).join(&release.tag_name);
+    let release_dir = Path::new(root).join(&release.tag_name);
     fs::rename(&tmp_dir.join("extracted"), &release_dir)?;
-
-    fs::write(CURRENT_VERSION_FILE, &release.tag_name)?;
+    fs::write(root.join(CURRENT_VERSION_FILE), &release.tag_name)?;
     if let Ok(folders) = read_dir(tmp_dir.parent().unwrap()) {
         for folder in folders.filter_map(|v| v.ok()).map(|v| v.path()) {
             if folder.is_dir() && folder != release_dir {
@@ -110,7 +108,7 @@ pub async fn download_update() -> Result<bool, anyhow::Error> {
         }
     }
 
-    fs::remove_file(DOWNLOAD_LOCK_FILE)?;
+    fs::remove_file(download_lock_file)?;
 
     Ok(true)
 }

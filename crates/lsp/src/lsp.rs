@@ -674,7 +674,7 @@ impl LanguageServer for Context {
 pub async fn main(path: PathBuf) {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-    let info = Arc::new(InfoProvider::new(50, false));
+    let info = Arc::new(InfoProvider::new(50, false, path).await);
     let (client, server) = LspService::build(|client| Context {
         client: client.clone(),
         db: Db::new(client, info.clone()),

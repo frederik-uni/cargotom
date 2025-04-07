@@ -152,6 +152,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1628fb46dfa0b37568d12e5edd512553eccf6a22a78e8bde00bb4aed84d5bdbf"
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "bytes"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -159,7 +165,7 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cargotom"
-version = "2.0.4"
+version = "2.1.0"
 dependencies = [
  "lsp",
  "tokio",
@@ -771,9 +777,10 @@ dependencies = [
 
 [[package]]
 name = "info-provider"
-version = "2.0.4"
+version = "2.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "reqwest",
  "rust-version",
  "serde",
@@ -917,7 +924,7 @@ dependencies = [
 
 [[package]]
 name = "lsp"
-version = "2.0.4"
+version = "2.1.0"
 dependencies = [
  "info-provider",
  "parser",
@@ -1112,7 +1119,7 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "2.0.4"
+version = "2.1.0"
 dependencies = [
  "async-recursion",
  "difference",
@@ -1316,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "rust-version"
-version = "2.0.4"
+version = "2.1.0"
 dependencies = [
  "serde",
 ]

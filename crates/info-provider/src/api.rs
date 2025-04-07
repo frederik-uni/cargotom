@@ -6,7 +6,7 @@ use std::{
 use reqwest::{header::USER_AGENT, Client};
 use rust_version::RustVersion;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Notify, RwLock};
+use tokio::sync::Notify;
 
 use crate::InfoProvider;
 
@@ -24,12 +24,7 @@ pub enum CacheItemOut<T> {
 }
 
 impl InfoProvider {
-    pub async fn set_per_page(&self, per_page: usize) {
-        *self.per_page.write().await = per_page;
-        self.search_cache.lock().await.drain();
-    }
-
-    pub async fn get_crate_repository(&self, crate_name: &str) -> Option<String> {
+    pub async fn get_crate_repository_api(&self, crate_name: &str) -> Option<String> {
         let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
 
         let response = self
@@ -43,7 +38,11 @@ impl InfoProvider {
         json["crate"]["repository"].as_str().map(|s| s.to_string())
     }
 
-    pub async fn get_info_cache(&self, registry: Option<&str>, name: &str) -> CacheItemOut<Root1> {
+    pub async fn get_info_cache_api(
+        &self,
+        registry: Option<&str>,
+        name: &str,
+    ) -> CacheItemOut<Root1> {
         let reg = registry.unwrap_or(self.registry);
         let mut lock = self.info_cache.lock().await;
         let cache = lock.entry(reg.to_owned()).or_default();
@@ -55,7 +54,7 @@ impl InfoProvider {
         }
     }
 
-    pub async fn search(&self, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
+    pub async fn search_api(&self, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
         let fetch = {
             let lock = self.search_cache.lock().await;
             match lock.get(name) {
@@ -109,7 +108,11 @@ impl InfoProvider {
         }
     }
 
-    pub async fn get_info(&self, registry: Option<&str>, name: &str) -> Result<Vec<Root1>, String> {
+    pub async fn get_info_api(
+        &self,
+        registry: Option<&str>,
+        name: &str,
+    ) -> Result<Vec<Root1>, String> {
         let reg = registry.unwrap_or(self.registry);
         let fetch = {
             let mut lock = self.info_cache.lock().await;
