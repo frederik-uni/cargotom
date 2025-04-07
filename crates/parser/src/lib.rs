@@ -6,7 +6,9 @@ pub mod toml;
 pub mod tree;
 mod tree_to_struct;
 
-use std::{collections::HashMap, fs::read_to_string, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap, fs::read_to_string, panic::catch_unwind, path::PathBuf, sync::Arc,
+};
 
 use config::Config;
 use info_provider::api::InfoProvider;
@@ -99,7 +101,7 @@ impl Db {
     }
     pub fn get_line(&self, uri: &Uri, bytes_offset: usize) -> Option<usize> {
         if let Some(v) = self.files.get(uri) {
-            let line_index = v.byte_to_line(bytes_offset);
+            let line_index = catch_unwind(|| v.byte_to_line(bytes_offset)).ok()?;
             return Some(line_index);
         }
         None
@@ -115,8 +117,8 @@ impl Db {
 
     pub fn get_byte(&self, uri: &Uri, line: usize, char: usize) -> Option<usize> {
         if let Some(v) = self.files.get(uri) {
-            let line_chars = v.line_to_char(line);
-            let byte = v.char_to_byte(line_chars + char);
+            let line_chars = catch_unwind(|| v.line_to_char(line)).ok()?;
+            let byte = catch_unwind(|| v.char_to_byte(line_chars + char)).ok()?;
             return Some(byte);
         }
         None
@@ -144,9 +146,9 @@ impl Db {
 
     pub fn get_offset(&self, uri: &Uri, byte_offset: usize) -> Option<(usize, usize)> {
         if let Some(v) = self.files.get(uri) {
-            let line_index = v.byte_to_line(byte_offset);
-            let line_start_char = v.line_to_char(line_index);
-            let char_offset = v.byte_to_char(byte_offset);
+            let line_index = catch_unwind(|| v.byte_to_line(byte_offset)).ok()?;
+            let line_start_char = catch_unwind(|| v.line_to_char(line_index)).ok()?;
+            let char_offset = catch_unwind(|| v.byte_to_char(byte_offset)).ok()?;
             let char_offset_in_line = char_offset - line_start_char;
             return Some((line_index, char_offset_in_line));
         }
@@ -171,10 +173,10 @@ impl Db {
         (le, ce): (usize, usize),
     ) -> Option<&Positioned<Dependency>> {
         let file = self.files.get(uri)?;
-        let cs = file.line_to_char(ls) + cs;
-        let bs = file.char_to_byte(cs);
-        let ce = file.line_to_char(le) + ce;
-        let be = file.char_to_byte(ce);
+        let cs = catch_unwind(|| file.line_to_char(ls) + cs).ok()?;
+        let bs = catch_unwind(|| file.char_to_byte(cs)).ok()?;
+        let ce = catch_unwind(|| file.line_to_char(le) + ce).ok()?;
+        let be = catch_unwind(|| file.char_to_byte(ce)).ok()?;
         let toml = self.tomls.get(uri)?;
         let found = toml
             .dependencies
@@ -217,16 +219,17 @@ impl Db {
         uri: &Uri,
         range: Option<((usize, usize), (usize, usize))>,
         content: &str,
-    ) {
+    ) -> Option<()> {
         if let Some(((sl, sc), (el, ec))) = range {
             let file = self.files.get_mut(&uri).unwrap();
-            let start = file.line_to_char(sl) + sc;
-            let end = file.line_to_char(el) + ec;
+            let start = catch_unwind(|| file.line_to_char(sl) + sc).ok()?;
+            let end = catch_unwind(|| file.line_to_char(el) + ec).ok()?;
             file.remove(start..end);
             file.insert(start, content);
         } else {
             self.files.insert(uri.clone(), Rope::from_str(content));
         }
+        Some(())
     }
 
     pub async fn try_init(&mut self, file: &Uri) {
