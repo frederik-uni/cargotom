@@ -240,6 +240,8 @@ impl Db {
             self.add_file(file);
         }
 
+        self.analyze(Some(file.clone())).await;
+
         let file = Url::from_file_path(
             file.to_file_path()
                 .ok()?
