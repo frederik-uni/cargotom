@@ -511,7 +511,7 @@ impl LanguageServer for Context {
                         .map(|v| CompletionItem {
                             label: v.name.clone(),
                             kind: Some(CompletionItemKind::MODULE),
-                            detail: None,
+                            detail: v.description,
                             preselect: Some(v.exact_match),
                             sort_text: None,
                             text_edit: Some(CompletionTextEdit::Edit(TextEdit {
