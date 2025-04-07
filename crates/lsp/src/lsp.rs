@@ -12,11 +12,12 @@ use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionItem, CompletionItemKind,
     CompletionOptions, CompletionParams, CompletionResponse, CompletionTextEdit,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
-    ExecuteCommandParams, Hover, HoverParams, HoverProviderCapability, InlayHint, InlayHintKind,
-    InlayHintParams, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
-    SignatureHelpOptions, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextEdit, Url,
+    DidChangeTextDocumentParams, DidChangeWorkspaceFoldersParams, DidOpenTextDocumentParams,
+    DocumentFormattingParams, ExecuteCommandParams, Hover, HoverParams, HoverProviderCapability,
+    InlayHint, InlayHintKind, InlayHintParams, MessageType, OneOf, Position, Range,
+    ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url,
+    WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
 use tower_lsp::{
     async_trait,
@@ -55,6 +56,31 @@ fn load_config(params: &InitializeParams) -> Config {
 
 #[async_trait]
 impl LanguageServer for Context {
+    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
+        self.client
+            .log_message(
+                MessageType::INFO,
+                "aquire write lock did_change_workspace_folders",
+            )
+            .await;
+        let mut lock = self.db.write().await;
+        self.client
+            .log_message(
+                MessageType::INFO,
+                "aquired write lock did_change_workspace_folders",
+            )
+            .await;
+        for remove in params.event.removed {
+            lock.remove_workspace(&remove.uri);
+        }
+        for add in params.event.added {
+            let mut root = add.uri;
+            if !root.as_str().ends_with('/') {
+                root = Url::parse(&(root.as_str().to_owned() + "/")).unwrap();
+            }
+            lock.try_init(&root.join("Cargo.toml").unwrap()).await;
+        }
+    }
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let c = self.db.clone();
         let config = load_config(&params);
@@ -134,7 +160,13 @@ impl LanguageServer for Context {
                     ],
                     ..Default::default()
                 }),
-                workspace: None,
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
+                        supported: Some(true),
+                        change_notifications: Some(OneOf::Left(true)),
+                    }),
+                    file_operations: None,
+                }),
                 call_hierarchy_provider: None,
                 semantic_tokens_provider: None,
                 moniker_provider: None,

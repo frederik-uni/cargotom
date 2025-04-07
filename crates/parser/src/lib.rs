@@ -73,6 +73,21 @@ pub enum Indent {
 }
 
 impl Db {
+    pub fn remove_workspace(&mut self, workspace_uri: &Url) {
+        self.files
+            .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
+        self.trees
+            .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
+        self.tomls
+            .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
+        self.workspaces
+            .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
+    }
+
+    fn is_within_workspace(file_uri: &Url, workspace_uri: &Url) -> bool {
+        file_uri.as_str().starts_with(workspace_uri.as_str())
+    }
+
     pub fn get_lock(&self, uri: &Uri) -> Option<&CargoLockRaw> {
         let mut file = self.workspaces.get(uri).unwrap_or(uri).clone();
         if let Ok(mut v) = file.path_segments_mut() {

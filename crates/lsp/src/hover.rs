@@ -2,7 +2,7 @@ use std::usize;
 
 use parser::{
     structs::lock::Source,
-    toml::{DepSource, Dependency, Positioned},
+    toml::{Dependency, Positioned},
     tree::RangeExclusive,
     Db,
 };
