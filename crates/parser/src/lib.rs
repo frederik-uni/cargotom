@@ -11,7 +11,7 @@ use std::{
 };
 
 use config::Config;
-use info_provider::api::InfoProvider;
+use info_provider::InfoProvider;
 use ropey::Rope;
 use structs::lock::{CargoLockRaw, Package};
 use tokio::sync::RwLock;

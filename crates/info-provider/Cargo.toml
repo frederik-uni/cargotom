@@ -4,10 +4,16 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-reqwest = { workspace = true, features = [ "json", ] }
+reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 urlencoding.workspace = true
 anyhow.workspace = true
 rust-version.workspace = true
+zstd = "0.13.3"
+tar = "0.4"
+byteorder.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

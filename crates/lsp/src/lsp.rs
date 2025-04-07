@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use info_provider::api::InfoProvider;
+use info_provider::InfoProvider;
 use parser::config::Config;
 use parser::toml::{DepSource, OptionalKey, Positioned};
 use parser::{Db, Indent};
@@ -674,7 +674,7 @@ impl LanguageServer for Context {
 pub async fn main(path: PathBuf) {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-    let info = Arc::new(InfoProvider::new(50));
+    let info = Arc::new(InfoProvider::new(50, false, path).await);
     let (client, server) = LspService::build(|client| Context {
         client: client.clone(),
         db: Db::new(client, info.clone()),
