@@ -14,11 +14,11 @@ use tower_lsp::lsp_types::{
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionItem, CompletionItemKind,
     CompletionOptions, CompletionParams, CompletionResponse, CompletionTextEdit,
     DidChangeTextDocumentParams, DidChangeWorkspaceFoldersParams, DidOpenTextDocumentParams,
-    DocumentFormattingParams, ExecuteCommandParams, Hover, HoverParams, HoverProviderCapability,
-    InlayHint, InlayHintKind, InlayHintParams, MessageType, OneOf, Position, Range,
-    ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url, WorkspaceEdit,
-    WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
+    DocumentFormattingParams, ExecuteCommandParams, Hover, HoverContents, HoverParams,
+    HoverProviderCapability, InlayHint, InlayHintKind, InlayHintParams, MarkupKind, MessageType,
+    OneOf, Position, Range, ServerCapabilities, ServerInfo, SignatureHelpOptions,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Url,
+    WorkspaceEdit, WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
 use tower_lsp::{
     async_trait,
@@ -579,12 +579,40 @@ impl LanguageServer for Context {
         self.client
             .log_message(MessageType::INFO, "aquired read lock hover")
             .await;
-
+        let path = lock
+            .get_path(
+                &uri,
+                params.text_document_position_params.position.line,
+                params.text_document_position_params.position.character,
+            )
+            .await;
         if let Some(h) = self
             .hover_dep(&uri, params.text_document_position_params.position, &lock)
             .await
         {
             return Ok(Some(h));
+        }
+
+        if let (Some(last), Some(path)) = (path.as_ref().and_then(|v| v.last()), &path) {
+            let start = try_option!(lock.get_offset(&uri, last.range.start as usize));
+            let end = try_option!(lock.get_offset(&uri, last.range.end as usize));
+
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(tower_lsp::lsp_types::MarkupContent {
+                    kind: MarkupKind::PlainText,
+                    value: format!("{:?}", path),
+                }),
+                range: Some(Range::new(
+                    Position {
+                        line: start.0 as u32,
+                        character: start.1 as u32,
+                    },
+                    Position {
+                        line: end.0 as u32,
+                        character: end.1 as u32,
+                    },
+                )),
+            }));
         }
 
         Ok(None)
@@ -619,10 +647,10 @@ impl LanguageServer for Context {
                     info.into_iter()
                         .enumerate()
                         .map(|(i, v)| CompletionItem {
-                            label: v.name.clone(),
-                            kind: Some(CompletionItemKind::MODULE),
+                            label: format!("{i}. {}", v.name.clone()),
+                            // kind: Some(CompletionItemKind::MODULE),
                             detail: v.description,
-                            preselect: Some(v.exact_match),
+                            // preselect: Some(v.exact_match),
                             sort_text: Some(format!("{:06}", i)),
                             text_edit: Some(CompletionTextEdit::Edit(TextEdit {
                                 range: Range {

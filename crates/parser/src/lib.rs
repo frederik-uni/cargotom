@@ -16,8 +16,8 @@ use ropey::Rope;
 use structs::lock::{CargoLockRaw, Package};
 use tokio::sync::RwLock;
 use toml::{Dependency, Positioned, Toml};
-use tower_lsp::Client;
-use tree::{RangeExclusive, Tree};
+use tower_lsp::{lsp_types::MessageType, Client};
+use tree::{PathValue, RangeExclusive, Tree};
 use tree_to_struct::to_struct;
 use url::Url;
 
@@ -73,6 +73,18 @@ pub enum Indent {
 }
 
 impl Db {
+    pub async fn get_path(&self, uri: &Uri, line: u32, char: u32) -> Option<Vec<PathValue>> {
+        let byte = self.get_byte(uri, line as usize, char as usize)?;
+        let tree = self.trees.get(uri)?;
+        self.client
+            .log_message(MessageType::INFO, format!("{}\n{:#?}", byte, tree))
+            .await;
+        let v = tree.path(byte);
+        match v.is_empty() {
+            true => None,
+            false => Some(v),
+        }
+    }
     pub fn remove_workspace(&mut self, workspace_uri: &Url) {
         self.files
             .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));

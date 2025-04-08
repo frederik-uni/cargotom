@@ -35,25 +35,26 @@ pub fn to_struct(tree: &Tree, target: Arc<Vec<Positioned<Target>>>) -> Toml {
             "target" => {
                 for tree in value.value.as_tree().unwrap().nodes.iter() {
                     let key = &tree.key.value;
+                    let range = tree.key.closest_range(tree.pos.end);
                     let targets = if key.ends_with(")") {
                         if let Some(v) = key.strip_prefix("cfg(") {
                             let value = v.strip_suffix(")").unwrap();
                             Arc::new(vec![Positioned {
-                                start: tree.key.range.start + 4,
-                                end: tree.key.range.end - 1,
+                                start: range.start + 4,
+                                end: range.end - 1,
                                 data: Target::Unknown(value.to_string()),
                             }])
                         } else {
                             Arc::new(vec![Positioned {
-                                start: tree.key.range.start,
-                                end: tree.key.range.end,
+                                start: range.start,
+                                end: range.end,
                                 data: Target::Unknown(key.to_string()),
                             }])
                         }
                     } else {
                         Arc::new(vec![Positioned {
-                            start: tree.key.range.start,
-                            end: tree.key.range.end,
+                            start: range.start,
+                            end: range.end,
                             data: Target::Unknown(key.to_string()),
                         }])
                     };
