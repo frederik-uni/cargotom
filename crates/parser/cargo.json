@@ -190,7 +190,13 @@
     },
     "profile": {
       "description": "Compiler settings and optimizations",
-      "contents": "object"
+      "contents": {
+        "dev": "profile",
+        "release": "profile",
+        "test": "profile",
+        "bench": "profile",
+        "$(?s).*": "profile"
+      }
     },
     "dev-dependencies": {
       "description": "Dependencies for examples, tests, and benchmarks.",
@@ -237,6 +243,78 @@
     }
   },
   "$components": {
+    "opt-level-number": {
+      "contents": "number",
+      "values": {
+        "0": "no optimizations",
+        "1": "basic optimizations",
+        "2": "some optimizations",
+        "3": "all optimizations"
+      }
+    },
+    "opt-level-string": {
+      "contents": "string",
+      "values": {
+        "s": "optimize for binary size",
+        "z": "optimize for binary size, but also turn off loop vectorization."
+      }
+    },
+    "opt-level": {
+      "description": "The opt-level setting controls the -C opt-level flag which controls the level of optimization. Higher optimization levels may produce faster runtime code at the expense of longer compiler times. Higher levels may also change and rearrange the compiled code which may make it harder to use with a debugger.",
+      "contents": "opt-level-number | opt-level-string"
+    },
+    "profile": {
+      "description": "Profiles provide a way to alter the compiler settings, influencing things like optimizations and debugging symbols.\nCargo has 4 built-in profiles: dev, release, test, and bench. The profile is automatically chosen based on which command is being run if a profile is not specified on the command-line. In addition to the built-in profiles, custom user-defined profiles can also be specified.\nProfile settings can be changed in Cargo.toml with the [profile] table. Within each named profile, individual settings can be changed with key/value pairs like this:\n```rs\n[profile.dev]\nopt-level = 1               # Use slightly better optimizations.\noverflow-checks = false     # Disable integer overflow checks.\n```\nCargo only looks at the profile settings in the Cargo.toml manifest at the root of the workspace. Profile settings defined in dependencies will be ignored.\nAdditionally, profiles can be overridden from a config definition. Specifying a profile in a config file or environment variable will override the settings from Cargo.toml.",
+      "contents": {
+        "opt-level": "opt-level",
+        "overflow-checks": "bool",
+        "strip": {
+          "description": "The strip option controls the -C strip flag, which directs rustc to strip either symbols or debuginfo from a binary. This can be enabled like so:",
+          "contents": "string",
+          "default": "none",
+          "values": ["none", "debuginfo", "symbols"]
+        },
+        "debug-assertions": {
+          "description": "The debug-assertions setting controls the -C debug-assertions flag which turns cfg(debug_assertions) conditional compilation on or off. Debug assertions are intended to include runtime validation which is only available in debug/development builds. These may be things that are too expensive or otherwise undesirable in a release build. Debug assertions enables the debug_assert! macro in the standard library.",
+          "contents": "bool"
+        },
+        "lto": {
+          "description": "The lto setting controls rustc’s -C lto, -C linker-plugin-lto, and -C embed-bitcode options, which control LLVM’s link time optimizations. LTO can produce better optimized code, using whole-program analysis, at the cost of longer linking time.",
+          "contents": "bool|string",
+          "values": {
+            "false": "Performs “thin local LTO” which performs “thin” LTO on the local crate only across its codegen units. No LTO is performed if codegen units is 1 or opt-level is 0.",
+            "true": "Performs “fat” LTO which attempts to perform optimizations across all crates within the dependency graph.",
+            "fat": "Performs “fat” LTO which attempts to perform optimizations across all crates within the dependency graph.",
+            "thin": " Performs “thin” LTO. This is similar to “fat”, but takes substantially less time to run while still achieving performance gains similar to “fat”.",
+            "off": "Disables LTO."
+          }
+        },
+        "panic": {
+          "description": "When set to \"unwind\", the actual value depends on the default of the target platform. For example, the NVPTX platform does not support unwinding, so it always uses \"abort\".\nTests, benchmarks, build scripts, and proc macros ignore the panic setting. The rustc test harness currently requires unwind behavior. See the panic-abort-tests unstable flag which enables abort behavior.\nAdditionally, when using the abort strategy and building a test, all of the dependencies will also be, forced to build with the unwind strategy.",
+          "contents": "string",
+          "values": {
+            "unwind": "Unwind the stack upon panic.",
+            "abort": "Terminate the process upon panic."
+          }
+        },
+        "incremental": {
+          "description": "The incremental setting controls the -C incremental flag which controls whether or not incremental compilation is enabled. Incremental compilation causes rustc to save additional information to disk which will be reused when recompiling the crate, improving re-compile times. The additional information is stored in the target directory.",
+          "contents": "bool"
+        },
+        "codegen-units": {
+          "description": "The codegen-units setting controls the -C codegen-units flag which controls how many “code generation units” a crate will be split into. More code generation units allows more of a crate to be processed in parallel possibly reducing compile time, but may produce slower code.\nThis option takes an integer greater than 0.\nThe default is 256 for incremental builds, and 16 for non-incremental builds.",
+          "contents": "number"
+        },
+        "rpath": {
+          "description": "The rpath setting controls the -C rpath flag which controls whether or not rpath is enabled.",
+          "contents": "bool"
+        },
+        "split-debuginfo": {
+          "description": "The split-debuginfo setting controls the -C split-debuginfo flag which controls whether debug information, if generated, is either placed in the executable itself or adjacent to it.\nThis option is a string and acceptable values are the same as those the compiler accepts. The default value for this option is unpacked on macOS for profiles that have debug information otherwise enabled. Otherwise the default for this option is documented with rustc and is platform-specific. Some options are only available on the nightly channel. The Cargo default may change in the future once more testing has been performed, and support for DWARF is stabilized.\nBe aware that Cargo and rustc have different defaults for this option. This option exists to allow Cargo to experiment on different combinations of flags thus providing better debugging and developer experience.",
+          "contents": "bool"
+        }
+      }
+    },
     "resolver": {
       "contents": "string",
       "values": {

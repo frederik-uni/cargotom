@@ -59,6 +59,7 @@ pub enum Types {
     Element(Arc<Val>),
     String,
     Bool,
+    Int,
     Object,
     Array(Box<Types>),
 }
@@ -137,6 +138,8 @@ fn parse_type(v: &str, info: &HashMap<String, Arc<Val>>) -> Types {
         Types::Bool
     } else if v == "object" {
         Types::Object
+    } else if v == "number" {
+        Types::Int
     } else if v.starts_with("array<") && v.ends_with('>') {
         let inner = &v[6..v.len() - 1];
         let inner_type = parse_type(inner, info);
