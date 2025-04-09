@@ -53,7 +53,9 @@
 - [x] Static
 
 ### Code completion
-- [ ] static manifest suggestions
+- [x] static manifest suggestions
+  - [ ] fix path detection
+  - [ ] default value
 - [ ] dependency
   - [x] name
     - [ ] filter existing

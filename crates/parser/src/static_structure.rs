@@ -4,7 +4,8 @@ use indexmap::IndexMap;
 use regex::bytes::Regex;
 use serde::Deserialize;
 
-pub type Elements = IndexMap<String, Element>;
+pub type Elements = IndexMap<String, ElementKind2>;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Element {
@@ -26,6 +27,13 @@ pub enum Values {
 pub enum ElementKind {
     Id(String),
     Complex(Elements),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum ElementKind2 {
+    Id(String),
+    Complex(Element),
 }
 
 #[derive(Deserialize)]
@@ -255,38 +263,52 @@ pub fn parse_all() -> Parsed {
     Parsed { entries: out }
 }
 
-fn parse(t: Element, info: &HashMap<String, Arc<Val>>) -> Val {
-    let ty = match t.contents {
-        ElementKind::Id(id) => id
-            .split("|")
-            .map(|v| v.trim())
-            .map(|v| parse_type(v, info))
-            .collect::<Vec<_>>(),
-        ElementKind::Complex(hash_map) => {
-            vec![Types::Map(Parsed {
-                entries: hash_map
-                    .into_iter()
-                    .map(|(k, v)| {
-                        (
-                            match k.strip_prefix("$") {
-                                Some(v) => Key::Pattern(Regex::new(v).unwrap()),
-                                None => Key::Exact(k),
-                            },
-                            Arc::new(parse(v, info)),
-                        )
-                    })
-                    .collect(),
-            })]
+fn parse(t: ElementKind2, info: &HashMap<String, Arc<Val>>) -> Val {
+    match t {
+        ElementKind2::Id(id) => Val {
+            ty: id
+                .split("|")
+                .map(|v| v.trim())
+                .map(|v| parse_type(v, info))
+                .collect::<Vec<_>>(),
+            default: None,
+            detail: None,
+            values: None,
+        },
+        ElementKind2::Complex(t) => {
+            let ty = match t.contents {
+                ElementKind::Id(id) => id
+                    .split("|")
+                    .map(|v| v.trim())
+                    .map(|v| parse_type(v, info))
+                    .collect::<Vec<_>>(),
+                ElementKind::Complex(hash_map) => {
+                    vec![Types::Map(Parsed {
+                        entries: hash_map
+                            .into_iter()
+                            .map(|(k, v)| {
+                                (
+                                    match k.strip_prefix("$") {
+                                        Some(v) => Key::Pattern(Regex::new(v).unwrap()),
+                                        None => Key::Exact(k),
+                                    },
+                                    Arc::new(parse(v, info)),
+                                )
+                            })
+                            .collect(),
+                    })]
+                }
+            };
+            Val {
+                ty,
+                default: t.default,
+                detail: t.description,
+                values: t.values.map(|v| match v {
+                    Values::NoDetail(v) => v.into_iter().map(|v| (v, None::<String>)).collect(),
+                    Values::Detail(v) => v.into_iter().map(|v| (v.0, Some(v.1))).collect(),
+                }),
+            }
         }
-    };
-    Val {
-        ty,
-        default: t.default,
-        detail: t.description,
-        values: t.values.map(|v| match v {
-            Values::NoDetail(v) => v.into_iter().map(|v| (v, None::<String>)).collect(),
-            Values::Detail(v) => v.into_iter().map(|v| (v.0, Some(v.1))).collect(),
-        }),
     }
 }
 

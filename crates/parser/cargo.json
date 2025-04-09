@@ -152,7 +152,7 @@
         },
         "dependencies": {
           "description": "Keys for inheriting in package dependencies",
-          "contents": "object"
+          "contents": "dependencies"
         }
       }
     },
@@ -194,15 +194,15 @@
     },
     "dev-dependencies": {
       "description": "Dependencies for examples, tests, and benchmarks.",
-      "contents": "object"
+      "contents": "dependencies"
     },
     "dependencies": {
       "description": "Package library dependencies.",
-      "contents": "object"
+      "contents": "dependencies"
     },
     "build-dependencies": {
       "description": "Dependencies for build scripts.",
-      "contents": "object"
+      "contents": "dependencies"
     },
     "target": {
       "description": "Target-specific dependencies.",
@@ -211,7 +211,7 @@
           "contents": {
             "dependencies": {
               "description": "Package library dependencies.",
-              "contents": "object"
+              "contents": "dependencies"
             }
           }
         }
@@ -219,11 +219,21 @@
     },
     "features": {
       "description": "Conditional compilation features",
-      "contents": "object"
+      "contents": {
+        "$(?s).*": "array<string>"
+      }
     },
     "patch": {
       "description": "Override dependencies",
-      "contents": "object"
+      "contents": {
+        "$(?s).*": {
+          "contents": {
+            "$(?s).*": {
+              "contents": "dependency"
+            }
+          }
+        }
+      }
     }
   },
   "$components": {
@@ -233,6 +243,28 @@
         "3": "\"3\" (edition = \"2024\" default, requires Rust 1.84+): Change the default for resolver.incompatible-rust-versions from allow to fallback",
         "2": "\"2\" (edition = \"2021\" default): Introduces changes in feature unification. See the features chapter for more details.",
         "1": "(default)"
+      }
+    },
+    "dependency": {
+      "contents": {
+        "version": "string",
+        "git": "string",
+        "registry": "string",
+        "branch": "string",
+        "rev": "string",
+        "tag": "string",
+        "path": "string",
+        "optional": "bool",
+        "package": "string",
+        "default-features": "bool",
+        "features": "array<string>"
+      }
+    },
+    "dependencies": {
+      "contents": {
+        "$(?s).*": {
+          "contents": "string | dependency"
+        }
       }
     },
     "workspace": {
