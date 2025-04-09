@@ -50,7 +50,7 @@
 - [x] available versions
 - [x] available features
 - [x] crate description(README)
-- [ ] Static
+- [x] Static
 
 ### Code completion
 - [ ] static manifest suggestions
