@@ -1,6 +1,6 @@
 # CargoTom[l]
 ## Config
-```json
+```jsonc
 "lsp": {
   "cargo-tom": {
     "initialization_options": {
@@ -19,7 +19,7 @@
       "offline": false,
     }
   },
-  ...
+  // ...
 }
 ```
 ## Features
