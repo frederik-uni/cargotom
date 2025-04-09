@@ -1,6 +1,7 @@
 mod analyze;
 pub mod config;
 mod format;
+pub mod lock;
 pub mod static_structure;
 pub mod structs;
 pub mod toml;
@@ -13,6 +14,7 @@ use std::{
 
 use config::Config;
 use info_provider::InfoProvider;
+use lock::LoggedRwLock;
 use ropey::Rope;
 use static_structure::{parse_all, Parsed};
 use structs::lock::{CargoLockRaw, Package};
@@ -25,7 +27,7 @@ use url::Url;
 
 pub type Uri = url::Url;
 pub struct Db {
-    pub sel: Option<Arc<RwLock<Db>>>,
+    pub sel: Option<Arc<LoggedRwLock<Db>>>,
     pub client: Client,
     pub static_data: Parsed,
     files: HashMap<Uri, Rope>,
@@ -53,20 +55,23 @@ pub struct Warning {
 }
 
 impl Db {
-    pub fn new(client: Client, info: Arc<InfoProvider>) -> Arc<RwLock<Self>> {
-        let sel = Arc::new(RwLock::new(Self {
-            static_data: parse_all(),
-            config: Config::default(),
-            sel: Default::default(),
-            client,
-            info,
-            files: HashMap::new(),
-            trees: HashMap::new(),
-            tomls: HashMap::new(),
-            workspaces: HashMap::new(),
-            locks: HashMap::new(),
-            warnings: Default::default(),
-        }));
+    pub fn new(client: Client, info: Arc<InfoProvider>) -> Arc<LoggedRwLock<Db>> {
+        let sel = Arc::new(LoggedRwLock::new(
+            client.clone(),
+            Self {
+                static_data: parse_all(),
+                config: Config::default(),
+                sel: Default::default(),
+                client,
+                info,
+                files: HashMap::new(),
+                trees: HashMap::new(),
+                tomls: HashMap::new(),
+                workspaces: HashMap::new(),
+                locks: HashMap::new(),
+                warnings: Default::default(),
+            },
+        ));
         sel
     }
 }
@@ -81,7 +86,7 @@ impl Db {
         let byte = self.get_byte(uri, line as usize, char as usize)?;
         let tree = self.trees.get(uri)?;
         self.client
-            .log_message(MessageType::INFO, format!("{}\n{:#?}", byte, tree))
+            .log_message(MessageType::INFO, format!("{:#?}", tree))
             .await;
         let v = tree.path(byte);
         match v.is_empty() {
@@ -89,6 +94,7 @@ impl Db {
             false => Some(v),
         }
     }
+
     pub fn remove_workspace(&mut self, workspace_uri: &Url) {
         self.files
             .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));

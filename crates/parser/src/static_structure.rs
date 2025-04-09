@@ -56,6 +56,40 @@ pub enum Types {
 }
 
 impl Types {
+    pub fn completions_path(&self, keys: &[String], index: usize, is_value: bool) -> Vec<String> {
+        match self {
+            Types::Element(val) => val
+                .ty
+                .iter()
+                .flat_map(|v| v.completions_path(keys, index, is_value))
+                .collect(),
+            Types::Map(v) => v.completions(keys, index, is_value).unwrap_or_default(),
+            Types::Array(v) => v.completions_path(keys, index, is_value),
+            _ => vec![],
+        }
+    }
+    pub fn completions(&self, is_value: bool) -> Vec<String> {
+        match is_value {
+            true => match self {
+                Types::Element(val) => val
+                    .values
+                    .as_ref()
+                    .map_or(vec![], |v| v.keys().cloned().collect()),
+                Types::Array(types) => types.completions(is_value),
+                _ => vec![],
+            },
+            false => match self {
+                Types::Map(parsed) => parsed.entries.iter().filter_map(|v| v.0.as_str()).collect(),
+                Types::Element(val) => val
+                    .ty
+                    .iter()
+                    .flat_map(|v| v.completions(is_value))
+                    .collect(),
+                Types::Array(types) => types.completions(is_value),
+                _ => vec![],
+            },
+        }
+    }
     pub fn search(&self, keys: &[String], index: usize, is_value: bool) -> Option<String> {
         match self {
             Types::Map(parsed) => parsed.get_detail(keys, index, is_value),
@@ -112,6 +146,12 @@ pub enum Key {
 }
 
 impl Key {
+    fn as_str(&self) -> Option<String> {
+        match self {
+            Key::Exact(k) => Some(k.to_owned()),
+            _ => None,
+        }
+    }
     fn is_match(&self, key: &str) -> bool {
         match self {
             Key::Exact(k) => k == key,
@@ -126,6 +166,42 @@ pub struct Parsed {
 }
 
 impl Parsed {
+    pub fn completions(
+        &self,
+        keys: &[String],
+        index: usize,
+        is_value: bool,
+    ) -> Option<Vec<String>> {
+        if index >= keys.len() {
+            return None;
+        }
+        let key = &keys[index];
+        let last = index == keys.len() - 1;
+        let item = &self.entries.iter().find(|(k, _)| k.is_match(&key))?.1;
+        match (last, is_value) {
+            (true, true) => {
+                let mut v = item
+                    .values
+                    .as_ref()
+                    .map(|v| v.keys().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default();
+                v.extend(item.ty.iter().flat_map(|v| v.completions(is_value)));
+                Some(v)
+            }
+            (true, false) => Some(
+                item.ty
+                    .iter()
+                    .flat_map(|v| v.completions(is_value))
+                    .collect(),
+            ),
+            (false, _) => Some(
+                item.ty
+                    .iter()
+                    .flat_map(|v| v.completions_path(keys, index + 1, is_value))
+                    .collect(),
+            ),
+        }
+    }
     pub fn get_detail(&self, keys: &[String], index: usize, is_value: bool) -> Option<String> {
         if index >= keys.len() {
             return None;

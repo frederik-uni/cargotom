@@ -43,13 +43,19 @@ pub struct PathValue {
 }
 
 impl PathValue {
-    pub fn is_value(&self) -> bool {
+    pub fn is_value(&self, last: Option<&Self>) -> bool {
+        if let Some(last) = last {
+            if self.range.start == last.range.start {
+                return false;
+            }
+        }
         matches!(self.tyoe, Type::String(_) | Type::Bool(_) | Type::Unknown)
     }
 }
 
 impl Tree {
     pub fn path(&self, cursor: usize) -> Vec<PathValue> {
+        //TODO: check if in content
         self.nodes
             .iter()
             .find_map(|v| match v.key.ranges.iter().find(|v| v.contains(cursor)) {
@@ -74,6 +80,16 @@ impl Tree {
                     }
                 }
             })
+            .or(self
+                .nodes
+                .iter()
+                .find_map(|v| match v.pos.contains(cursor) {
+                    true => Some(vec![PathValue {
+                        tyoe: Type::TreeKey(v.key.value.clone()),
+                        range: v.key.closest_range(v.pos.end),
+                    }]),
+                    false => None,
+                }))
             .unwrap_or_default()
     }
 }
@@ -97,7 +113,7 @@ impl Key {
             .iter()
             .filter(|v| v.end <= value_start)
             .max_by(|a, b| a.end.cmp(&b.end))
-            .unwrap()
+            .unwrap_or(self.ranges.first().unwrap())
             .clone()
     }
     pub fn to_positioned(&self, value_start: u32) -> Positioned<String> {

@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use parser::{
+    lock::LoggedReadGuard,
     toml::{DepSource, Dependency, DependencyKind, Positioned},
     tree::RangeExclusive,
     Db,
 };
 use rust_version::RustVersion;
-use tokio::sync::RwLockReadGuard;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, Position, Range, TextEdit, Url, WorkspaceEdit,
 };
@@ -19,7 +19,7 @@ impl Context {
         uri: &Url,
         version: &Positioned<String>,
         ver: Option<RustVersion>,
-        lock: &RwLockReadGuard<Db>,
+        lock: &LoggedReadGuard<Db>,
     ) -> Option<CodeAction> {
         let ver = ver?;
         let version_parsed = RustVersion::try_from(version.data.as_str()).ok()?;
@@ -63,7 +63,7 @@ impl Context {
         uri: &Url,
         dep: &Positioned<parser::toml::Dependency>,
         range: &Range,
-        lock: &RwLockReadGuard<Db>,
+        lock: &LoggedReadGuard<Db>,
     ) -> Option<Vec<CodeAction>> {
         if let DepSource::Workspace(_) = dep.data.source {
             return None;
@@ -127,7 +127,7 @@ impl Context {
         &self,
         uri: &Url,
         dep: &Positioned<parser::toml::Dependency>,
-        lock: &RwLockReadGuard<Db>,
+        lock: &LoggedReadGuard<Db>,
     ) -> Option<Vec<CodeAction>> {
         let start = lock.get_offset(uri, dep.start as usize)?;
         let end = lock.get_offset(uri, dep.end as usize)?;

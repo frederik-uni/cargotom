@@ -21,3 +21,7 @@ regex.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
+
+[features]
+default = []
+log-all = []

@@ -1,13 +1,13 @@
 use std::usize;
 
 use parser::{
+    lock::LoggedReadGuard,
     structs::lock::Source,
     toml::{Dependency, Positioned},
     tree::RangeExclusive,
     Db,
 };
 use rust_version::RustVersion;
-use tokio::sync::RwLockReadGuard;
 use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Range, Url};
 
 use crate::lsp::Context;
@@ -18,7 +18,7 @@ impl Context {
         dep: &Positioned<Dependency>,
         offset: usize,
         uri: &Url,
-        lock: &RwLockReadGuard<'_, Db>,
+        lock: &LoggedReadGuard<'_, Db>,
     ) -> Option<Hover> {
         let range = dep.data.source.range()?;
         if range.contains(offset) {
@@ -64,7 +64,7 @@ impl Context {
         dep: &Positioned<Dependency>,
         offset: usize,
         uri: &Url,
-        lock: &RwLockReadGuard<'_, Db>,
+        lock: &LoggedReadGuard<'_, Db>,
     ) -> Option<Hover> {
         let range = RangeExclusive::from(&dep.data.name);
         if range.contains(offset) {
@@ -110,7 +110,7 @@ impl Context {
         dep: &Positioned<Dependency>,
         offset: usize,
         uri: &Url,
-        lock: &RwLockReadGuard<'_, Db>,
+        lock: &LoggedReadGuard<'_, Db>,
     ) -> Option<Hover> {
         if dep.end == 0 {
             return None;
@@ -181,7 +181,7 @@ impl Context {
         &self,
         uri: &Url,
         position: Position,
-        lock: &RwLockReadGuard<'_, Db>,
+        lock: &LoggedReadGuard<'_, Db>,
     ) -> Option<Hover> {
         let pos = (position.line as usize, position.character as usize);
         let dep = lock.get_dependency(

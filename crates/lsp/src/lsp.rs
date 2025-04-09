@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use info_provider::InfoProvider;
 use parser::config::Config;
+use parser::lock::LoggedRwLock;
 use parser::toml::{DepSource, OptionalKey, Positioned};
 use parser::{Db, Indent};
 use rust_version::RustVersion;
-use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
@@ -28,7 +28,7 @@ use tower_lsp::{
 
 pub struct Context {
     pub client: Client,
-    db: Arc<RwLock<Db>>,
+    db: Arc<LoggedRwLock<Db>>,
     pub info: Arc<InfoProvider>,
 }
 
@@ -58,19 +58,7 @@ fn load_config(params: &InitializeParams) -> Config {
 #[async_trait]
 impl LanguageServer for Context {
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
-        self.client
-            .log_message(
-                MessageType::INFO,
-                "aquire write lock did_change_workspace_folders",
-            )
-            .await;
-        let mut lock = self.db.write().await;
-        self.client
-            .log_message(
-                MessageType::INFO,
-                "aquired write lock did_change_workspace_folders",
-            )
-            .await;
+        let mut lock = self.db.write("did_change_workspace_folders").await;
         for remove in params.event.removed {
             lock.remove_workspace(&remove.uri);
         }
@@ -85,13 +73,7 @@ impl LanguageServer for Context {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let c = self.db.clone();
         let config = load_config(&params);
-        self.client
-            .log_message(MessageType::INFO, "aquire write lock init")
-            .await;
-        let mut lock = self.db.write().await;
-        self.client
-            .log_message(MessageType::INFO, "aquired write lock init")
-            .await;
+        let mut lock = self.db.write("initialize").await;
         lock.config = config;
         self.info.set_per_page(lock.config.per_page).await;
         self.info.set_offline(lock.config.offline).await;
@@ -191,13 +173,8 @@ impl LanguageServer for Context {
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         if uri.to_string().ends_with("/Cargo.lock") {
-            self.client
-                .log_message(MessageType::INFO, "aquire write lock change")
-                .await;
-            let mut lock = self.db.write().await;
-            self.client
-                .log_message(MessageType::INFO, "aquired write lock change")
-                .await;
+            let mut lock = self.db.write("change").await;
+
             lock.update_lock(uri).await;
             return;
         }
@@ -205,13 +182,7 @@ impl LanguageServer for Context {
             return;
         }
         {
-            self.client
-                .log_message(MessageType::INFO, "aquire write lock change")
-                .await;
-            let mut lock = self.db.write().await;
-            self.client
-                .log_message(MessageType::INFO, "aquired write lock change")
-                .await;
+            let mut lock = self.db.write("change").await;
             for change in params.content_changes {
                 let range = change.range.map(|v| {
                     (
@@ -230,13 +201,7 @@ impl LanguageServer for Context {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
         if uri.to_string().ends_with("/Cargo.lock") {
-            self.client
-                .log_message(MessageType::INFO, "aquire write lock open")
-                .await;
-            let mut lock = self.db.write().await;
-            self.client
-                .log_message(MessageType::INFO, "aquired write lock open")
-                .await;
+            let mut lock = self.db.write("open").await;
             lock.update_lock(uri).await;
             return;
         }
@@ -244,13 +209,7 @@ impl LanguageServer for Context {
             return;
         }
         {
-            self.client
-                .log_message(MessageType::INFO, "aquire write lock open")
-                .await;
-            let mut lock = self.db.write().await;
-            self.client
-                .log_message(MessageType::INFO, "aquired write lock open")
-                .await;
+            let mut lock = self.db.write("open").await;
             lock.update(&uri, None, &params.text_document.text);
             lock.reload(uri).await;
         }
@@ -279,13 +238,7 @@ impl LanguageServer for Context {
         if params.range.start.line == 0 || params.range.end.line == 0 {
             actions.extend(self.first_line_actions().await);
         }
-        self.client
-            .log_message(MessageType::INFO, "aquire read lock code_action")
-            .await;
-        let lock = self.db.read().await;
-        self.client
-            .log_message(MessageType::INFO, "aquired read lock code_action")
-            .await;
+        let lock = self.db.read("code_action").await;
         if let Some(dep) = lock.get_dependency(
             &uri,
             (
@@ -506,13 +459,7 @@ impl LanguageServer for Context {
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
-        self.client
-            .log_message(MessageType::INFO, "aquire read lock formatting")
-            .await;
-        let temp = self.db.read().await;
-        self.client
-            .log_message(MessageType::INFO, "aquired read lock formatting")
-            .await;
+        let temp = self.db.read("formatting").await;
         let data = temp
             .format(
                 &params.text_document.uri,
@@ -539,12 +486,10 @@ impl LanguageServer for Context {
         if !self.shoud_allow_user(&params.text_document.uri) {
             return Ok(None);
         }
-        self.client
-            .log_message(MessageType::INFO, "aquire read lock inlay_hint")
-            .await;
+
         let v = self
             .db
-            .read()
+            .read("inlay_hint")
             .await
             .hints(&params.text_document.uri)
             .await
@@ -561,9 +506,6 @@ impl LanguageServer for Context {
                 data: None,
             })
             .collect();
-        self.client
-            .log_message(MessageType::INFO, "aquired read lock inlay hint")
-            .await;
         Ok(Some(v))
     }
 
@@ -572,14 +514,8 @@ impl LanguageServer for Context {
         if !self.shoud_allow_user(&uri) {
             return Ok(None);
         }
-        self.client
-            .log_message(MessageType::INFO, "aquire read lock hover")
-            .await;
-        let lock = self.db.read().await;
-        self.client
-            .log_message(MessageType::INFO, "aquired read lock hover")
-            .await;
 
+        let lock = self.db.read("hover").await;
         if let Some(h) = self
             .hover_dep(&uri, params.text_document_position_params.position, &lock)
             .await
@@ -599,7 +535,7 @@ impl LanguageServer for Context {
                 .iter()
                 .map(|v| v.tyoe.to_string())
                 .collect::<Vec<String>>();
-            let detail = try_option!(lock.static_data.get_detail(&p, 0, last.is_value()));
+            let detail = try_option!(lock.static_data.get_detail(&p, 0, last.is_value(None)));
             let start = try_option!(lock.get_offset(&uri, last.range.start as usize));
             let end = try_option!(lock.get_offset(&uri, last.range.end as usize));
 
@@ -630,7 +566,7 @@ impl LanguageServer for Context {
             return Ok(None);
         }
 
-        let lock = self.db.read().await;
+        let lock = self.db.read("completion").await;
         let toml = match lock.get_toml(&uri) {
             Some(v) => v,
             None => return Ok(None),
@@ -700,9 +636,6 @@ impl LanguageServer for Context {
                         })
                         .collect(),
                 )));
-                self.client
-                    .log_message(MessageType::INFO, format!("{:#?}", out))
-                    .await;
                 return out;
             }
             if let DepSource::Version { value, registry } = &dep.data.source {
@@ -815,6 +748,39 @@ impl LanguageServer for Context {
         }
         if let Some(feat) = toml.features.iter().find(|v| v.contains(pos)) {
             //TODO: features
+        }
+
+        let path = lock
+            .get_path(
+                &uri,
+                params.text_document_position.position.line,
+                params.text_document_position.position.character,
+            )
+            .await;
+        if let Some(mut path) = path {
+            let is_value = path
+                .pop()
+                .map(|v| v.is_value(path.last()))
+                .unwrap_or_default();
+            let p = path
+                .iter()
+                .map(|v| v.tyoe.to_string())
+                .collect::<Vec<String>>();
+            self.client
+                .log_message(MessageType::INFO, format!("{} {:?}", is_value, p))
+                .await;
+            let v = lock
+                .static_data
+                .completions(&p, 0, is_value)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|v| CompletionItem {
+                    label: v,
+                    detail: None,
+                    text_edit: None,
+                    ..Default::default()
+                });
+            return Ok(Some(CompletionResponse::Array(v.collect())));
         }
 
         Ok(None)

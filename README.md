@@ -83,6 +83,7 @@
 - [ ] Features
   - [ ] check for feature duplicate
   - [ ] check if `dep:crate_name` is optional
+- [ ] cargo-udeps
 
 ### Formatter
 - [x] enable taplo formatter

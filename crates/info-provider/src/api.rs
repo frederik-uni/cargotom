@@ -27,7 +27,7 @@ impl InfoProvider {
     pub async fn get_readme_api(&self, crate_name: &str, version: &str) -> Option<String> {
         let key = (crate_name.to_owned(), version.to_owned());
         let fetch = {
-            let lock = self.readme_cache.lock().await;
+            let lock = self.readme_cache.read().await;
             match lock.get(&key) {
                 Some(v) => match v {
                     CacheItem::Pending(n) => Some(n.clone()),
@@ -43,7 +43,7 @@ impl InfoProvider {
                 let n = Arc::new(Notify::new());
                 let notify = n.clone();
                 {
-                    let mut lock = self.readme_cache.lock().await;
+                    let mut lock = self.readme_cache.write().await;
                     lock.insert(key.clone(), CacheItem::Pending(notify.clone()));
                 }
                 let client = self.client.clone();
@@ -51,7 +51,7 @@ impl InfoProvider {
                 let readme_cache = self.readme_cache.clone();
                 tokio::spawn(async move {
                     let info = readme(&client, &key.0, &key.1).await;
-                    let mut lock = readme_cache.lock().await;
+                    let mut lock = readme_cache.write().await;
                     match &info {
                         Ok(items) => {
                             lock.insert(key, CacheItem::Ready(vec![items.clone()]));
@@ -67,7 +67,7 @@ impl InfoProvider {
             }
         };
         n.notified().await;
-        let lock = self.readme_cache.lock().await;
+        let lock = self.readme_cache.read().await;
         match lock.get(&key) {
             Some(v) => match v {
                 CacheItem::Pending(_) => None,
@@ -98,8 +98,11 @@ impl InfoProvider {
         name: &str,
     ) -> CacheItemOut<Root1> {
         let reg = registry.unwrap_or(self.registry);
-        let mut lock = self.info_cache.lock().await;
-        let cache = lock.entry(reg.to_owned()).or_default();
+        let lock = self.info_cache.read().await;
+        let cache = match lock.get(reg) {
+            Some(v) => v,
+            None => return CacheItemOut::NotStarted,
+        };
         match cache.get(name) {
             None => CacheItemOut::NotStarted,
             Some(CacheItem::Pending(_)) => CacheItemOut::Pending,
@@ -110,7 +113,7 @@ impl InfoProvider {
 
     pub async fn search_api(&self, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
         let fetch = {
-            let lock = self.search_cache.lock().await;
+            let lock = self.search_cache.read().await;
             match lock.get(name) {
                 Some(v) => match v {
                     CacheItem::Pending(n) => Some(n.clone()),
@@ -126,7 +129,7 @@ impl InfoProvider {
                 let n = Arc::new(Notify::new());
                 let notify = n.clone();
                 {
-                    let mut lock = self.search_cache.lock().await;
+                    let mut lock = self.search_cache.write().await;
                     lock.insert(name.to_owned(), CacheItem::Pending(notify.clone()));
                 }
                 let client = self.client.clone();
@@ -135,7 +138,7 @@ impl InfoProvider {
                 let search_cache = self.search_cache.clone();
                 tokio::spawn(async move {
                     let info = search(&client, per_page, &name).await;
-                    let mut lock = search_cache.lock().await;
+                    let mut lock = search_cache.write().await;
                     match &info {
                         Ok(items) => {
                             lock.insert(name, CacheItem::Ready(items.clone()));
@@ -151,7 +154,7 @@ impl InfoProvider {
             }
         };
         n.notified().await;
-        let lock = self.search_cache.lock().await;
+        let lock = self.search_cache.read().await;
         match lock.get(name) {
             Some(v) => match v {
                 CacheItem::Pending(_) => return Ok(vec![]),
@@ -169,13 +172,15 @@ impl InfoProvider {
     ) -> Result<Vec<Root1>, String> {
         let reg = registry.unwrap_or(self.registry);
         let fetch = {
-            let mut lock = self.info_cache.lock().await;
-            let cache = lock.entry(reg.to_owned()).or_default();
-            match cache.get(name) {
-                Some(v) => match v {
-                    CacheItem::Pending(n) => Some(n.clone()),
-                    CacheItem::Ready(items) => return Ok(items.clone()),
-                    CacheItem::Error(e) => return Err(e.clone()),
+            let lock = self.info_cache.read().await;
+            match lock.get(reg) {
+                Some(cache) => match cache.get(name) {
+                    Some(v) => match v {
+                        CacheItem::Pending(n) => Some(n.clone()),
+                        CacheItem::Ready(items) => return Ok(items.clone()),
+                        CacheItem::Error(e) => return Err(e.clone()),
+                    },
+                    None => None,
                 },
                 None => None,
             }
@@ -190,14 +195,14 @@ impl InfoProvider {
                 let info_cache = self.info_cache.clone();
                 let client = self.client.clone();
                 {
-                    let mut lock = self.info_cache.lock().await;
+                    let mut lock = self.info_cache.write().await;
                     let cache = lock.entry(reg.to_owned()).or_default();
                     cache.insert(name.to_owned(), CacheItem::Pending(notify.clone()));
                 }
                 tokio::spawn(async move {
                     let info = info(&client, &reg, &name).await;
 
-                    let mut lock = info_cache.lock().await;
+                    let mut lock = info_cache.write().await;
                     let cache = lock.entry(reg).or_default();
                     match &info {
                         Ok(v) => {
@@ -215,8 +220,11 @@ impl InfoProvider {
         };
 
         n.notified().await;
-        let mut lock = self.info_cache.lock().await;
-        let cache = lock.entry(reg.to_owned()).or_default();
+        let lock = self.info_cache.read().await;
+        let cache = match lock.get(reg) {
+            Some(v) => v,
+            None => return Ok(vec![]),
+        };
         match cache.get(name) {
             Some(v) => match v {
                 CacheItem::Pending(_) => return Ok(vec![]),

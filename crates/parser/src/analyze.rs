@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_recursion::async_recursion;
 use info_provider::api::CacheItemOut;
 use rust_version::RustVersion;
-use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range};
 
 use crate::{toml::DepSource, tree::RangeExclusive, Db, Level, Uri, Warning};
 
@@ -69,18 +69,19 @@ impl Db {
                 }
             }
         }
+
         for toml in &toml.dependencies {
             let src = if let DepSource::Workspace(range) = &toml.data.source {
                 workspace.as_ref().and_then(|v| {
                     v.dependencies
                         .iter()
                         .find(|v| v.data.name.data == toml.data.name.data)
-                        .map(|v| (&v.data.source, Some(range.clone())))
+                        .map(|v| (&v.data.source, Some(range.clone()), true))
                 })
             } else {
-                Some((&toml.data.source, toml.data.source.range()))
+                Some((&toml.data.source, toml.data.source.range(), false))
             };
-            if let Some((DepSource::Version { value, registry }, range)) = src {
+            if let Some((DepSource::Version { value, registry }, range, workspace)) = src {
                 let range = range.unwrap();
                 let info = self
                     .info
@@ -93,17 +94,27 @@ impl Db {
                     CacheItemOut::Error(e) => {
                         errors.push((RangeExclusive::from(&toml.data.name), e))
                     }
-                    CacheItemOut::NotStarted | CacheItemOut::Pending => {
+                    CacheItemOut::Pending => {}
+                    CacheItemOut::NotStarted => {
                         let info = self.info.clone();
                         let reg = registry.as_ref().map(|v| v.value.data.to_string());
                         let name = toml.data.name.data.to_owned();
                         let uri = uri.clone();
                         let sel = self.sel.clone().unwrap();
-                        tokio::spawn(async move {
-                            let _ = info.get_info(reg.as_deref(), &name).await;
-                            let lock = sel.read().await;
-                            lock.analyze_single(&uri).await;
-                        });
+                        if !workspace {
+                            tokio::spawn(async move {
+                                //rerun in thread
+                                let v = matches!(
+                                    info.get_info_cache(reg.as_deref(), &name).await,
+                                    CacheItemOut::NotStarted
+                                );
+                                if v {
+                                    let _ = info.get_info(reg.as_deref(), &name).await;
+                                }
+                                let lock = sel.read("analyze spawn").await;
+                                lock.analyze_single(&uri).await;
+                            });
+                        }
                     }
                     CacheItemOut::Ready(items) => {
                         let ver = RustVersion::try_from(value.value.data.as_str());

@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use api::{CacheItem, CacheItemOut, Crate, Root1};
 use local::OfflineCrate;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 pub mod api;
 mod downloader;
@@ -10,9 +10,9 @@ mod local;
 pub struct InfoProvider {
     client: Arc<reqwest::Client>,
     registry: &'static str,
-    readme_cache: Arc<Mutex<HashMap<(String, String), CacheItem<String>>>>,
-    info_cache: Arc<Mutex<HashMap<String, HashMap<String, CacheItem<Root1>>>>>,
-    search_cache: Arc<Mutex<HashMap<String, CacheItem<Crate>>>>,
+    readme_cache: Arc<RwLock<HashMap<(String, String), CacheItem<String>>>>,
+    info_cache: Arc<RwLock<HashMap<String, HashMap<String, CacheItem<Root1>>>>>,
+    search_cache: Arc<RwLock<HashMap<String, CacheItem<Crate>>>>,
     per_page: RwLock<usize>,
     offline: Arc<RwLock<bool>>,
     data: Arc<RwLock<Vec<OfflineCrate>>>,
@@ -41,7 +41,7 @@ impl InfoProvider {
 
     pub async fn set_per_page(&self, per_page: usize) {
         *self.per_page.write().await = per_page;
-        self.search_cache.lock().await.drain();
+        self.search_cache.write().await.drain();
     }
 
     pub async fn set_offline(&self, offline: bool) {
