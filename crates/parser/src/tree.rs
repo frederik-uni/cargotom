@@ -1,6 +1,8 @@
+use std::fmt::Display;
+
 use taplo::{
     dom::{
-        node::{Table, TableKind},
+        node::{DomNode, Table, TableKind},
         Node,
     },
     rowan::TextRange,
@@ -15,6 +17,67 @@ pub(crate) struct Tree {
     pub pos: RangeExclusive,
 }
 
+#[derive(Debug)]
+pub enum Type {
+    TreeKey(String),
+    String(String),
+    Bool(bool),
+    Unknown,
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::TreeKey(key) => write!(f, "{}", key),
+            Type::String(value) => write!(f, "{}", value),
+            Type::Bool(value) => write!(f, "{}", value),
+            Type::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PathValue {
+    pub tyoe: Type,
+    pub range: RangeExclusive,
+}
+
+impl PathValue {
+    pub fn is_value(&self) -> bool {
+        matches!(self.tyoe, Type::String(_) | Type::Bool(_) | Type::Unknown)
+    }
+}
+
+impl Tree {
+    pub fn path(&self, cursor: usize) -> Vec<PathValue> {
+        self.nodes
+            .iter()
+            .find_map(|v| match v.key.ranges.iter().find(|v| v.contains(cursor)) {
+                Some(r) => Some(vec![PathValue {
+                    tyoe: Type::TreeKey(v.key.value.clone()),
+                    range: r.clone(),
+                }]),
+                None => {
+                    let items = v.value.path(cursor);
+                    match items.is_empty() {
+                        true => None,
+                        false => {
+                            let start = items.first().unwrap().range.start;
+
+                            let mut out = vec![PathValue {
+                                tyoe: Type::TreeKey(v.key.value.clone()),
+                                range: v.key.closest_range(start),
+                            }];
+                            out.extend(items);
+                            Some(out)
+                        }
+                    }
+                }
+            })
+            .unwrap_or_default()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TreeValue {
     pub key: Key,
@@ -24,15 +87,24 @@ pub(crate) struct TreeValue {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Key {
-    pub(crate) range: RangeExclusive,
+    pub(crate) ranges: Vec<RangeExclusive>,
     pub(crate) value: String,
 }
 
 impl Key {
-    pub fn to_positioned(&self) -> Positioned<String> {
+    pub fn closest_range(&self, value_start: u32) -> RangeExclusive {
+        self.ranges
+            .iter()
+            .filter(|v| v.end <= value_start)
+            .max_by(|a, b| a.end.cmp(&b.end))
+            .unwrap()
+            .clone()
+    }
+    pub fn to_positioned(&self, value_start: u32) -> Positioned<String> {
+        let range = self.closest_range(value_start);
         Positioned {
-            start: self.range.start,
-            end: self.range.end,
+            start: range.start,
+            end: range.end,
             data: self.value.clone(),
         }
     }
@@ -42,7 +114,6 @@ impl Key {
 pub(crate) enum Value {
     Tree {
         value: Tree,
-        range: RangeExclusive,
     },
     NoContent,
     Array {
@@ -57,7 +128,44 @@ pub(crate) enum Value {
         value: bool,
         range: RangeExclusive,
     },
-    Unknown,
+    Unknown(RangeExclusive),
+}
+
+impl Value {
+    pub fn path(&self, position: usize) -> Vec<PathValue> {
+        match self {
+            Value::Tree { value, .. } => value.path(position),
+            Value::NoContent => vec![],
+            Value::Array { value, .. } => value
+                .iter()
+                .find_map(|v| {
+                    let items = v.path(position);
+                    match items.is_empty() {
+                        true => None,
+                        false => Some(items),
+                    }
+                })
+                .unwrap_or_default(),
+            Value::String { value, range } => match range.contains(position) {
+                true => vec![PathValue {
+                    tyoe: Type::String(value.to_owned()),
+                    range: range.clone(),
+                }],
+                false => vec![],
+            },
+            Value::Bool { value, range } => match range.contains(position) {
+                true => vec![PathValue {
+                    tyoe: Type::Bool(*value),
+                    range: range.clone(),
+                }],
+                false => vec![],
+            },
+            Value::Unknown(r) => vec![PathValue {
+                tyoe: Type::Unknown,
+                range: r.clone(),
+            }],
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
@@ -109,16 +217,21 @@ impl From<&Table> for Tree {
             .iter()
             .map(|(key, value)| {
                 let key = Key {
-                    range: key.text_ranges().next().unwrap().into(),
+                    ranges: key.text_ranges().map(|v| v.into()).collect(),
                     value: key.value().to_string(),
                 };
+                let range_ = RangeExclusive::from(value.syntax().unwrap().text_range());
+
                 let value = Value::from(value);
+                let closest_range = key.closest_range(range_.end);
+                let range = value.range();
+
                 TreeValue {
-                    pos: value
-                        .range()
-                        .map(|v| key.range.join(&v))
-                        .unwrap_or(key.range),
-                    value: match value.range() == Some(key.range) {
+                    pos: range
+                        .map(|v| v.join(&closest_range))
+                        .unwrap_or(closest_range)
+                        .join(&range_),
+                    value: match range == Some(closest_range) {
                         true => Value::NoContent,
                         false => value,
                     },
@@ -126,14 +239,21 @@ impl From<&Table> for Tree {
                 }
             })
             .collect();
+        let v = match table.inner.syntax.as_ref().unwrap() {
+            taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
+            taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
+        }
+        .into();
+        let pos = nodes
+            .iter()
+            .map(|v| v.pos)
+            .reduce(|a, b| a.join(&b))
+            .map(|v| v.join(&v))
+            .unwrap_or(v);
         Self {
             nodes,
             kind: table.kind(),
-            pos: match table.inner.syntax.as_ref().unwrap() {
-                taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
-                taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
-            }
-            .into(),
+            pos,
         }
     }
 }
@@ -143,11 +263,6 @@ impl From<&Node> for Value {
         match node {
             taplo::dom::Node::Table(table) => Value::Tree {
                 value: Tree::from(table),
-                range: match table.inner.syntax.as_ref().unwrap() {
-                    taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
-                    taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
-                }
-                .into(),
             },
             taplo::dom::Node::Array(arr) => Value::Array {
                 value: arr.items().get().iter().map(Self::from).collect(),
@@ -190,9 +305,27 @@ impl From<&Node> for Value {
                     range: range.into(),
                 }
             }
-            taplo::dom::Node::Integer(_) => Value::Unknown,
-            taplo::dom::Node::Float(_) => Value::Unknown,
-            taplo::dom::Node::Date(_) => Value::Unknown,
+            taplo::dom::Node::Integer(i) => Value::Unknown(
+                match i.inner.syntax.as_ref().unwrap() {
+                    taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
+                    taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
+                }
+                .into(),
+            ),
+            taplo::dom::Node::Float(f) => Value::Unknown(
+                match f.inner.syntax.as_ref().unwrap() {
+                    taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
+                    taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
+                }
+                .into(),
+            ),
+            taplo::dom::Node::Date(d) => Value::Unknown(
+                match d.inner.syntax.as_ref().unwrap() {
+                    taplo::rowan::NodeOrToken::Node(node) => node.text_range(),
+                    taplo::rowan::NodeOrToken::Token(token) => token.text_range(),
+                }
+                .into(),
+            ),
         }
     }
 }
@@ -216,12 +349,8 @@ pub fn str_to_positioned(str: &str, range: &RangeExclusive) -> Positioned<String
 
 impl TreeValue {
     pub fn range(&self) -> RangeExclusive {
-        let mut min: u32 = self.key.range.start;
-        let mut max: u32 = self.key.range.end;
-        if let Some(range) = self.value.range() {
-            min = min.min(range.start);
-            max = max.max(range.end);
-        }
+        let max: u32 = self.pos.end;
+        let min: u32 = self.pos.start;
         RangeExclusive {
             start: min,
             end: max,
@@ -237,7 +366,7 @@ impl Value {
             Value::Array { .. } => None,
             Value::String { value, range } => Some(str_to_positioned(value, range)),
             Value::Bool { .. } => None,
-            Value::Unknown => None,
+            Value::Unknown(_) => None,
         }
     }
     pub fn as_tree(&self) -> Option<&Tree> {
@@ -247,7 +376,7 @@ impl Value {
             Value::Array { .. } => None,
             Value::String { .. } => None,
             Value::Bool { .. } => None,
-            Value::Unknown => None,
+            Value::Unknown(_) => None,
         }
     }
 
@@ -258,7 +387,7 @@ impl Value {
             Value::Array { value, .. } => Some(value),
             Value::String { .. } => None,
             Value::Bool { .. } => None,
-            Value::Unknown => None,
+            Value::Unknown(_) => None,
         }
     }
 
@@ -273,35 +402,18 @@ impl Value {
                 end: range.end,
                 data: *value,
             }),
-            Value::Unknown => None,
+            Value::Unknown(_) => None,
         }
     }
 
     pub fn range(&self) -> Option<RangeExclusive> {
         match self {
-            Value::Tree { range, value } => {
-                let mut min: u32 = range.start;
-                let mut max: u32 = range.end;
-                for item in value.nodes.iter() {
-                    min = min.min(item.key.range.start);
-                    max = max.max(item.key.range.end);
-
-                    if let Some(range) = item.value.range() {
-                        min = min.min(range.start);
-                        max = max.max(range.end);
-                    }
-                }
-
-                Some(RangeExclusive {
-                    start: min,
-                    end: max,
-                })
-            }
+            Value::Tree { value } => Some(value.pos),
             Value::NoContent => None,
-            Value::Array { .. } => None,
+            Value::Array { range, .. } => Some(*range),
             Value::String { range, .. } => Some(*range),
             Value::Bool { range, .. } => Some(*range),
-            Value::Unknown => None,
+            Value::Unknown(r) => Some(*r),
         }
     }
 }

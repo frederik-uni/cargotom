@@ -16,3 +16,8 @@ info-provider = { workspace = true }
 rust-version.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 async-recursion.workspace = true
+indexmap = { workspace = true, features = ["serde"] }
+regex.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

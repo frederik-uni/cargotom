@@ -29,7 +29,7 @@ impl From<&Table> for Tree {
                     let value = Value::from(value);
                     TreeValue {
                         value: match value.range() == Some(key.range) {
-                            true => Value::NoContent,
+                            true => value,
                             false => value,
                         },
                         key,

@@ -165,7 +165,7 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cargotom"
-version = "2.3.3"
+version = "2.3.4"
 dependencies = [
  "lsp",
  "tokio",
@@ -810,11 +810,12 @@ checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.2",
+ "serde",
 ]
 
 [[package]]
 name = "info-provider"
-version = "2.3.3"
+version = "2.3.4"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -968,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "lsp"
-version = "2.3.3"
+version = "2.3.4"
 dependencies = [
  "info-provider",
  "parser",
@@ -1201,11 +1202,13 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "2.3.3"
+version = "2.3.4"
 dependencies = [
  "async-recursion",
  "difference",
+ "indexmap",
  "info-provider",
+ "regex",
  "ropey",
  "rust-version",
  "serde",
@@ -1476,7 +1479,7 @@ dependencies = [
 
 [[package]]
 name = "rust-version"
-version = "2.3.3"
+version = "2.3.4"
 dependencies = [
  "serde",
 ]
@@ -1823,7 +1826,7 @@ dependencies = [
 [[package]]
 name = "taplo"
 version = "0.13.2"
-source = "git+https://github.com/frederik-uni/taplo#3bf3794d47d8e020af1f1528e90cc0bb0a5e93b5"
+source = "git+https://github.com/frederik-uni/taplo#86d448f0f6d5c3ff5d7289faae718a63f2432110"
 dependencies = [
  "ahash",
  "arc-swap",
@@ -2600,9 +2603,9 @@ checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
 
 [[package]]
 name = "winnow"
-version = "0.7.4"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e97b544156e9bebe1a0ffbc03484fc1ffe3100cbce3ffb17eac35f7cdd7ab36"
+checksum = "63d3fcd9bba44b03821e7d699eeee959f3126dcc4aa8e4ae18ec617c2a5cea10"
 dependencies = [
  "memchr",
 ]

@@ -1,6 +1,7 @@
 mod analyze;
 pub mod config;
 mod format;
+pub mod static_structure;
 pub mod structs;
 pub mod toml;
 pub mod tree;
@@ -13,11 +14,12 @@ use std::{
 use config::Config;
 use info_provider::InfoProvider;
 use ropey::Rope;
+use static_structure::{parse_all, Parsed};
 use structs::lock::{CargoLockRaw, Package};
 use tokio::sync::RwLock;
 use toml::{Dependency, Positioned, Toml};
-use tower_lsp::Client;
-use tree::{RangeExclusive, Tree};
+use tower_lsp::{lsp_types::MessageType, Client};
+use tree::{PathValue, RangeExclusive, Tree};
 use tree_to_struct::to_struct;
 use url::Url;
 
@@ -25,6 +27,7 @@ pub type Uri = url::Url;
 pub struct Db {
     pub sel: Option<Arc<RwLock<Db>>>,
     pub client: Client,
+    pub static_data: Parsed,
     files: HashMap<Uri, Rope>,
     trees: HashMap<Uri, Tree>,
     tomls: HashMap<Uri, Toml>,
@@ -52,6 +55,7 @@ pub struct Warning {
 impl Db {
     pub fn new(client: Client, info: Arc<InfoProvider>) -> Arc<RwLock<Self>> {
         let sel = Arc::new(RwLock::new(Self {
+            static_data: parse_all(),
             config: Config::default(),
             sel: Default::default(),
             client,
@@ -73,6 +77,18 @@ pub enum Indent {
 }
 
 impl Db {
+    pub async fn get_path(&self, uri: &Uri, line: u32, char: u32) -> Option<Vec<PathValue>> {
+        let byte = self.get_byte(uri, line as usize, char as usize)?;
+        let tree = self.trees.get(uri)?;
+        self.client
+            .log_message(MessageType::INFO, format!("{}\n{:#?}", byte, tree))
+            .await;
+        let v = tree.path(byte);
+        match v.is_empty() {
+            true => None,
+            false => Some(v),
+        }
+    }
     pub fn remove_workspace(&mut self, workspace_uri: &Url) {
         self.files
             .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
