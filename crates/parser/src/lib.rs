@@ -1,6 +1,7 @@
 mod analyze;
 pub mod config;
 mod format;
+pub mod static_structure;
 pub mod structs;
 pub mod toml;
 pub mod tree;
@@ -13,6 +14,7 @@ use std::{
 use config::Config;
 use info_provider::InfoProvider;
 use ropey::Rope;
+use static_structure::{parse_all, Parsed};
 use structs::lock::{CargoLockRaw, Package};
 use tokio::sync::RwLock;
 use toml::{Dependency, Positioned, Toml};
@@ -25,6 +27,7 @@ pub type Uri = url::Url;
 pub struct Db {
     pub sel: Option<Arc<RwLock<Db>>>,
     pub client: Client,
+    pub static_data: Parsed,
     files: HashMap<Uri, Rope>,
     trees: HashMap<Uri, Tree>,
     tomls: HashMap<Uri, Toml>,
@@ -52,6 +55,7 @@ pub struct Warning {
 impl Db {
     pub fn new(client: Client, info: Arc<InfoProvider>) -> Arc<RwLock<Self>> {
         let sel = Arc::new(RwLock::new(Self {
+            static_data: parse_all(),
             config: Config::default(),
             sel: Default::default(),
             client,

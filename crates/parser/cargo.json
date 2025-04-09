@@ -1,0 +1,303 @@
+{
+  "$schema": {
+    "cargo-features": {
+      "description": "Experimental Cargo features are only available on the nightly channel. You are encouraged to experiment with these features to see if they meet your needs, and if there are any issues or problems. Check the linked tracking issues listed below for more information on the feature, and click the GitHub subscribe button if you want future updates.\n      After some period of time, if the feature does not have any major concerns, it can be stabilized, which will make it available on stable once the current nightly release reaches the stable channel (anywhere from 6 to 12 weeks). TODO: add values https://doc.rust-lang.org/cargo/reference/unstable.html",
+      "contents": "array<string>"
+    },
+    "package": {
+      "description": "Defines a package",
+      "contents": {
+        "name": {
+          "description": "The name of the package",
+          "contents": "string"
+        },
+        "version": {
+          "description": "The version of the package",
+          "contents": "string",
+          "default": "0.1.0"
+        },
+        "authors": {
+          "description": "The authors of the package",
+          "contents": "array<string>"
+        },
+        "edition": {
+          "description": "The Rust edition",
+          "contents": "edition"
+        },
+        "rust-version": {
+          "description": "The minimal supported Rust version",
+          "contents": "string"
+        },
+        "description": {
+          "description": "A description of the package",
+          "contents": "string"
+        },
+        "documentation": {
+          "description": "URL of the package documentation",
+          "contents": "string"
+        },
+        "readme": {
+          "description": "Path to the package’s README file",
+          "contents": "string"
+        },
+        "homepage": {
+          "description": "URL of the package homepage",
+          "contents": "string"
+        },
+        "repository": {
+          "description": "URL of the package source repository",
+          "contents": "string"
+        },
+        "license": {
+          "description": "The package license",
+          "contents": "string"
+        },
+        "license-file": {
+          "description": "Path to the text of the license",
+          "contents": "string"
+        },
+        "keywords": {
+          "description": "Keywords for the package",
+          "contents": "array<string>"
+        },
+        "categories": {
+          "description": "Categories of the package",
+          "contents": "array<string>"
+        },
+        "workspace": {
+          "description": "Path to the workspace for the package",
+          "contents": "string"
+        },
+        "build": {
+          "description": "Path to the package build script",
+          "contents": "string"
+        },
+        "links": {
+          "description": "Name of the native library the package links with",
+          "contents": "string"
+        },
+        "exclude": {
+          "description": "Files to exclude when publishing",
+          "contents": "array<string>"
+        },
+        "include": {
+          "description": "Files to include when publishing",
+          "contents": "array<string>"
+        },
+        "publish": {
+          "description": "Can be used to prevent publishing the package",
+          "contents": "array<string> | bool"
+        },
+        "metadata": {
+          "description": "Extra settings for external tools",
+          "contents": "object"
+        },
+        "default-run": {
+          "description": "The default binary to run by cargo run",
+          "contents": "string"
+        },
+        "autobins": {
+          "description": "Disables binary auto discovery",
+          "contents": "bool"
+        },
+        "autoexamples": {
+          "description": "Disables example auto discovery",
+          "contents": "bool"
+        },
+        "autotests": {
+          "description": "Disables test auto discovery",
+          "contents": "bool"
+        },
+        "autobenches": {
+          "description": "Disables bench auto discovery",
+          "contents": "bool"
+        },
+        "resolver": {
+          "description": "Sets the dependency resolver to use",
+          "contents": "string"
+        }
+      }
+    },
+    "workspace": {
+      "description": "The workspace definition",
+      "contents": {
+        "resolver": {
+          "description": "Sets the dependency resolver to use",
+          "contents": "string",
+          "values": ["2", "1"],
+          "default": "2"
+        },
+        "members": {
+          "description": "Packages to include in the workspace",
+          "contents": "array<string>"
+        },
+        "exclude": {
+          "description": "Packages to exclude from the workspace",
+          "contents": "array<string>"
+        },
+        "default-members": {
+          "description": "Packages to operate on when a specific package wasn’t selected",
+          "contents": "array<string>"
+        },
+        "package": {
+          "description": "Keys for inheriting in packages",
+          "contents": "$package"
+        },
+        "lints": {
+          "description": "Keys for inheriting in package lints",
+          "contents": "object"
+        },
+        "metadata": {
+          "description": "Extra settings for external tools",
+          "contents": "object"
+        },
+        "dependencies": {
+          "description": "Keys for inheriting in package dependencies",
+          "contents": "object"
+        }
+      }
+    },
+    "lib": {
+      "description": "Library target settings.",
+      "contents": "target-conf"
+    },
+    "bin": {
+      "description": "Binary target settings.",
+      "contents": "array<target-conf>"
+    },
+    "example": {
+      "description": "Example target settings.",
+      "contents": "array<target-conf>"
+    },
+    "test": {
+      "description": "Test target settings.",
+      "contents": "array<target-conf>"
+    },
+    "bench": {
+      "description": "Benchmark target settings.",
+      "contents": "array<target-conf>"
+    },
+    "badges": {
+      "description": "Badges to display on a registry",
+      "contents": "object"
+    },
+    "lints": {
+      "description": "Configure linters for this package",
+      "contents": "object"
+    },
+    "replace": {
+      "description": "Override dependencies (deprecated)",
+      "contents": "object"
+    },
+    "profile": {
+      "description": "Compiler settings and optimizations",
+      "contents": "object"
+    },
+    "dev-dependencies": {
+      "description": "Dependencies for examples, tests, and benchmarks.",
+      "contents": "object"
+    },
+    "dependencies": {
+      "description": "Package library dependencies.",
+      "contents": "object"
+    },
+    "build-dependencies": {
+      "description": "Dependencies for build scripts.",
+      "contents": "object"
+    },
+    "target": {
+      "description": "Target-specific dependencies.",
+      "contents": {
+        "$(?s).*": {
+          "contents": {
+            "dependencies": {
+              "description": "Package library dependencies.",
+              "contents": "object"
+            }
+          }
+        }
+      }
+    },
+    "features": {
+      "description": "Conditional compilation features",
+      "contents": "object"
+    },
+    "patch": {
+      "description": "Override dependencies",
+      "contents": "object"
+    }
+  },
+  "$components": {
+    "edition": {
+      "description": "The edition key is an optional key that affects which Rust Edition your package is compiled with. Setting the edition key in [package] will affect all targets/crates in the package, including test suites, benchmarks, binaries, examples, etc.\nMost manifests have the edition field filled in automatically by cargo new with the latest stable edition. By default cargo new creates a manifest with the 2024 edition currently.\nIf the edition field is not present in Cargo.toml, then the 2015 edition is assumed for backwards compatibility. Note that all manifests created with cargo new will not use this historical fallback because they will have edition explicitly specified to a newer value.",
+      "contents": "string",
+      "values": ["2015", "2018", "2021", "2024"],
+      "default": "2021"
+    },
+    "target-conf": {
+      "description": "Library target settings",
+      "contents": {
+        "name": {
+          "description": "The name field specifies the name of the target, which corresponds to the filename of the artifact that will be generated. For a library, this is the crate name that dependencies will use to reference it.\nFor the library target, this defaults to the name of the package , with any dashes replaced with underscores. For the default binary (src/main.rs), it also defaults to the name of the package, with no replacement for dashes. For auto discovered targets, it defaults to the directory or file name.\nThis is required for all targets except [lib].",
+          "contents": "string"
+        },
+        "path": {
+          "description": "The path field specifies where the source for the crate is located, relative to the Cargo.toml file.\nIf not specified, the inferred path is used based on the target name.",
+          "contents": "string",
+          "default": "true"
+        },
+        "test": {
+          "description": "The test field indicates whether or not the target is tested by default by cargo test. The default is true for lib, bins, and tests.",
+          "contents": "bool",
+          "default": "true"
+        },
+        "doctest": {
+          "description": "The doctest field indicates whether or not documentation examples are tested by default by cargo test. This is only relevant for libraries, it has no effect on other sections. The default is true for the library.",
+          "contents": "bool",
+          "default": "true"
+        },
+        "bench": {
+          "description": "The bench field indicates whether or not the target is benchmarked by default by cargo bench. The default is true for lib, bins, and benchmarks.",
+          "contents": "bool",
+          "default": "true"
+        },
+        "doc": {
+          "description": "The doc field indicates whether or not the target is included in the documentation generated by cargo doc by default. The default is true for libraries and binaries.",
+          "contents": "bool",
+          "default": "true"
+        },
+        "proc-macro": {
+          "description": "The proc-macro field indicates that the library is a procedural macro (reference). This is only valid for the [lib] target.",
+          "contents": "bool",
+          "default": "false"
+        },
+        "harness": {
+          "description": "The harness field indicates that the --test flag will be passed to rustc which will automatically include the libtest library which is the driver for collecting and running tests marked with the #[test] attribute or benchmarks with the #[bench] attribute. The default is true for all targets.\nIf set to false, then you are responsible for defining a main() function to run tests and benchmarks.\nTests have the cfg(test) conditional expression enabled whether or not the harness is enabled.",
+          "contents": "bool",
+          "default": "true"
+        },
+        "edition": {
+          "description": "The edition field defines the Rust edition the target will use. If not specified, it defaults to the edition field for the [package]. This field should usually not be set, and is only intended for advanced scenarios such as incrementally transitioning a large package to a new edition.",
+          "contents": "edition"
+        },
+        "required-features": {
+          "description": "The required-features field specifies which features the target needs in order to be built. If any of the required features are not enabled, the target will be skipped. This is only relevant for the [[bin]], [[bench]], [[test]], and [[example]] sections, it has no effect on [lib].",
+          "contents": "array<string>"
+        },
+        "crate-type": {
+          "description": "The crate-type field defines the crate types that will be generated by the target. It is an array of strings, allowing you to specify multiple crate types for a single target. This can only be specified for libraries and examples. Binaries, tests, and benchmarks are always the “bin” crate type. The defaults are:",
+          "contents": "array<string>",
+          "values": {
+            "bin": "A runnable executable will be produced. This requires that there is a main function in the crate which will be run when the program begins executing. This will link in all Rust and native dependencies, producing a single distributable binary. This is the default crate type.",
+            "lib": "A Rust library will be produced. This is an ambiguous concept as to what exactly is produced because a library can manifest itself in several forms. The purpose of this generic lib option is to generate the “compiler recommended” style of library. The output library will always be usable by rustc, but the actual type of library may change from time-to-time. The remaining output types are all different flavors of libraries, and the lib type can be seen as an alias for one of them (but the actual one is compiler-defined).",
+            "dylib": "A dynamic Rust library will be produced. This is different from the lib output type in that this forces dynamic library generation. The resulting dynamic library can be used as a dependency for other libraries and/or executables. This output type will create *.so files on Linux, *.dylib files on macOS, and *.dll files on Windows.",
+            "staticlib": "A static system library will be produced. This is different from other library outputs in that the compiler will never attempt to link to staticlib outputs. The purpose of this output type is to create a static library containing all of the local crate’s code along with all upstream dependencies. This output type will create *.a files on Linux, macOS and Windows (MinGW), and *.lib files on Windows (MSVC). This format is recommended for use in situations such as linking Rust code into an existing non-Rust application because it will not have dynamic dependencies on other Rust code.\nNote that any dynamic dependencies that the static library may have (such as dependencies on system libraries, or dependencies on Rust libraries that are compiled as dynamic libraries) will have to be specified manually when linking that static library from somewhere. The --print=native-static-libs flag may help with this.\nNote that, because the resulting static library contains the code of all the dependencies, including the standard library, and also exports all public symbols of them, linking the static library into an executable or shared library may need special care. In case of a shared library the list of exported symbols will have to be limited via e.g. a linker or symbol version script, exported symbols list (macOS), or module definition file (Windows). Additionally, unused sections can be removed to remove all code of dependencies that is not actually used (e.g. --gc-sections or -dead_strip for macOS).",
+            "cdylib": " A dynamic system library will be produced. This is used when compiling a dynamic library to be loaded from another language. This output type will create *.so files on Linux, *.dylib files on macOS, and *.dll files on Windows.",
+            "rlib": "A “Rust library” file will be produced. This is used as an intermediate artifact and can be thought of as a “static Rust library”. These rlib files, unlike staticlib files, are interpreted by the compiler in future linkage. This essentially means that rustc will look for metadata in rlib files like it looks for metadata in dynamic libraries. This form of output is used to produce statically linked executables as well as staticlib outputs.",
+            "proc-macro": "The output produced is not specified, but if a -L path is provided to it then the compiler will recognize the output artifacts as a macro and it can be loaded for a program. Crates compiled with this crate type must only export procedural macros. The compiler will automatically set the proc_macro configuration option. The crates are always compiled with the same target that the compiler itself was built with. For example, if you are executing the compiler from Linux with an x86_64 CPU, the target will be x86_64-unknown-linux-gnu even if the crate is a dependency of another crate being built for a different target."
+          }
+        }
+      }
+    }
+  }
+}

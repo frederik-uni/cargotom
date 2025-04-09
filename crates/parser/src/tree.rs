@@ -1,4 +1,4 @@
-use core::panic;
+use std::fmt::Display;
 
 use taplo::{
     dom::{
@@ -18,17 +18,34 @@ pub(crate) struct Tree {
 }
 
 #[derive(Debug)]
-enum Type {
+pub enum Type {
     TreeKey(String),
     String(String),
     Bool(bool),
     Unknown,
 }
 
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::TreeKey(key) => write!(f, "{}", key),
+            Type::String(value) => write!(f, "{}", value),
+            Type::Bool(value) => write!(f, "{}", value),
+            Type::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PathValue {
-    tyoe: Type,
+    pub tyoe: Type,
     pub range: RangeExclusive,
+}
+
+impl PathValue {
+    pub fn is_value(&self) -> bool {
+        matches!(self.tyoe, Type::String(_) | Type::Bool(_) | Type::Unknown)
+    }
 }
 
 impl Tree {
@@ -215,7 +232,7 @@ impl From<&Table> for Tree {
                         .unwrap_or(closest_range)
                         .join(&range_),
                     value: match range == Some(closest_range) {
-                        true => value,
+                        true => Value::NoContent,
                         false => value,
                     },
                     key,

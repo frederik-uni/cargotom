@@ -579,13 +579,7 @@ impl LanguageServer for Context {
         self.client
             .log_message(MessageType::INFO, "aquired read lock hover")
             .await;
-        let path = lock
-            .get_path(
-                &uri,
-                params.text_document_position_params.position.line,
-                params.text_document_position_params.position.character,
-            )
-            .await;
+
         if let Some(h) = self
             .hover_dep(&uri, params.text_document_position_params.position, &lock)
             .await
@@ -593,14 +587,26 @@ impl LanguageServer for Context {
             return Ok(Some(h));
         }
 
+        let path = lock
+            .get_path(
+                &uri,
+                params.text_document_position_params.position.line,
+                params.text_document_position_params.position.character,
+            )
+            .await;
         if let (Some(last), Some(path)) = (path.as_ref().and_then(|v| v.last()), &path) {
+            let p = path
+                .iter()
+                .map(|v| v.tyoe.to_string())
+                .collect::<Vec<String>>();
+            let detail = try_option!(lock.static_data.get_detail(&p, 0, last.is_value()));
             let start = try_option!(lock.get_offset(&uri, last.range.start as usize));
             let end = try_option!(lock.get_offset(&uri, last.range.end as usize));
 
             return Ok(Some(Hover {
                 contents: HoverContents::Markup(tower_lsp::lsp_types::MarkupContent {
                     kind: MarkupKind::PlainText,
-                    value: format!("{:?}", path),
+                    value: detail,
                 }),
                 range: Some(Range::new(
                     Position {
@@ -643,7 +649,7 @@ impl LanguageServer for Context {
                 let start = try_option!(lock.get_offset(&uri, dep.start as usize));
                 let end = try_option!(lock.get_offset(&uri, dep.end as usize));
 
-                return Ok(Some(CompletionResponse::Array(
+                let out = Ok(Some(CompletionResponse::Array(
                     info.into_iter()
                         .enumerate()
                         .map(|(i, v)| CompletionItem {
@@ -694,6 +700,10 @@ impl LanguageServer for Context {
                         })
                         .collect(),
                 )));
+                self.client
+                    .log_message(MessageType::INFO, format!("{:#?}", out))
+                    .await;
+                return out;
             }
             if let DepSource::Version { value, registry } = &dep.data.source {
                 if value.value.contains(pos) {

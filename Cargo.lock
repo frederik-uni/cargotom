@@ -810,6 +810,7 @@ checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.2",
+ "serde",
 ]
 
 [[package]]
@@ -1205,7 +1206,9 @@ version = "2.3.3"
 dependencies = [
  "async-recursion",
  "difference",
+ "indexmap",
  "info-provider",
+ "regex",
  "ropey",
  "rust-version",
  "serde",
