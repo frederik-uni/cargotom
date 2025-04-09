@@ -12,6 +12,7 @@ use std::{
     collections::HashMap, fs::read_to_string, panic::catch_unwind, path::PathBuf, sync::Arc,
 };
 
+use async_recursion::async_recursion;
 use config::Config;
 use info_provider::InfoProvider;
 use lock::LoggedRwLock;
@@ -232,6 +233,8 @@ impl Db {
             .find(|v| v.overlap(RangeExclusive::new(bs as u32, be as u32)))?;
         Some(found)
     }
+
+    #[async_recursion]
     pub async fn reload(&mut self, uri: Uri) -> Option<()> {
         let content = self.files.get(&uri);
         let mut uri_ = Some(uri.clone());
@@ -281,15 +284,13 @@ impl Db {
         Some(())
     }
 
-    pub async fn try_init(&mut self, file: &Uri) -> Option<()> {
-        if !self.files.contains_key(file) {
-            self.add_file(file);
+    pub async fn try_init(&mut self, uri: &Uri) -> Option<()> {
+        if !self.files.contains_key(uri) {
+            self.add_file(uri);
         }
 
-        self.analyze(Some(file.clone())).await;
-
         let file = Url::from_file_path(
-            file.to_file_path()
+            uri.to_file_path()
                 .ok()?
                 .parent()
                 .map(|v| v.join("Cargo.lock"))
@@ -299,6 +300,9 @@ impl Db {
         if !self.locks.contains_key(&file) {
             self.update_lock(file).await;
         }
+
+        self.reload(uri.clone()).await;
+
         Some(())
     }
 
