@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -6,6 +6,7 @@ use info_provider::InfoProvider;
 use parser::config::Config;
 use parser::lock::LoggedRwLock;
 use parser::toml::{DepSource, OptionalKey, Positioned};
+use parser::tree::RangeExclusive;
 use parser::{Db, Indent};
 use rust_version::RustVersion;
 use tower_lsp::jsonrpc::Result;
@@ -274,30 +275,31 @@ impl LanguageServer for Context {
 
                 let name = &dep.data.name.data;
 
-                let open_page = |actions_last: &mut Vec<CodeActionOrCommand>, name, url| {
-                    let action = CodeAction {
-                        title: format!("Open {name}"),
-                        kind: Some(CodeActionKind::EMPTY),
-                        command: Some(Command {
+                let open_page =
+                    |actions_last: &mut Vec<CodeActionOrCommand>, name, url: &String| {
+                        let action = CodeAction {
                             title: format!("Open {name}"),
-                            command: "open_url".to_string(),
-                            arguments: Some(vec![serde_json::Value::String(url)]),
-                        }),
-                        ..CodeAction::default()
+                            kind: Some(CodeActionKind::EMPTY),
+                            command: Some(Command {
+                                title: format!("Open {name}"),
+                                command: "open_url".to_string(),
+                                arguments: Some(vec![serde_json::Value::String(url.clone())]),
+                            }),
+                            ..CodeAction::default()
+                        };
+                        actions_last.push(CodeActionOrCommand::CodeAction(action));
                     };
-                    actions_last.push(CodeActionOrCommand::CodeAction(action));
-                };
 
                 if lock.config.offline {
                     let info = self.info.get_local(name).await;
                     if let Some(info) = info {
-                        if let Some(repo) = info.repository {
+                        if let Some(repo) = &info.repository {
                             open_page(&mut actions_last, "Repository", repo);
                         }
-                        if let Some(documentation) = info.documentation {
+                        if let Some(documentation) = &info.documentation {
                             open_page(&mut actions_last, "Documentation", documentation);
                         }
-                        if let Some(homepage) = info.homepage {
+                        if let Some(homepage) = &info.homepage {
                             open_page(&mut actions_last, "Homepage", homepage);
                         }
                     }
@@ -305,7 +307,7 @@ impl LanguageServer for Context {
                     open_page(
                         &mut actions_last,
                         "Documentation",
-                        format!("https://docs.rs/{name}/{version}/"),
+                        &format!("https://docs.rs/{name}/{version}/"),
                     );
                     let action = CodeAction {
                         title: "Open Source".to_string(),
@@ -325,7 +327,7 @@ impl LanguageServer for Context {
                 open_page(
                     &mut actions_last,
                     "crates.io",
-                    format!("https://crates.io/crates/{name}"),
+                    &format!("https://crates.io/crates/{name}"),
                 );
             } else if let DepSource::Workspace(range) = &dep.data.source {
                 let workspace_uri = lock.get_workspace(&uri);
@@ -577,16 +579,33 @@ impl LanguageServer for Context {
             Some(v) => v,
             None => return Ok(None),
         };
+        let mut deps = toml
+            .dependencies
+            .iter()
+            .map(|v| &v.data.name.data)
+            .collect::<HashSet<_>>();
         if let Some(dep) = toml.dependencies.iter().find(|v| v.contains(pos)) {
             if dep.data.name.contains(pos) {
                 let end = pos.saturating_sub(dep.data.name.start as usize);
+                let remove = toml
+                    .dependencies
+                    .iter()
+                    .find(|v| {
+                        v.data.name.data == dep.data.name.data
+                            && RangeExclusive::from(&v.data.name)
+                                != RangeExclusive::from(&dep.data.name)
+                    })
+                    .is_none();
+                if remove {
+                    deps.remove(&&dep.data.name.data);
+                }
                 let slice = dep.data.name.data.get(..end).unwrap_or(&dep.data.name.data);
                 let info = self.info.search(slice).await.unwrap_or_default();
                 let start = try_option!(lock.get_offset(&uri, dep.start as usize));
                 let end = try_option!(lock.get_offset(&uri, dep.end as usize));
-
                 let out = Ok(Some(CompletionResponse::Array(
                     info.into_iter()
+                        .filter(|v| !deps.contains(&v.name))
                         .enumerate()
                         .map(|(i, v)| CompletionItem {
                             label: format!("{i}. {}", v.name.clone()),
@@ -722,6 +741,14 @@ impl LanguageServer for Context {
                         features
                             .into_iter()
                             .filter(|v| v.starts_with(slice))
+                            .filter(|name| {
+                                dep.data
+                                    .features
+                                    .data
+                                    .iter()
+                                    .find(|v| &v.data == name)
+                                    .is_none()
+                            })
                             .map(|v| CompletionItem {
                                 label: v.clone(),
                                 kind: Some(CompletionItemKind::MODULE),

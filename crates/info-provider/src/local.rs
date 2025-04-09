@@ -16,10 +16,7 @@ use crate::{api::Crate, downloader::download_update, InfoProvider};
 impl InfoProvider {
     pub async fn search_local(&self, name: &str) -> Vec<Crate> {
         let lock = self.data.read().await;
-        let mut v: Vec<_> = lock
-            .iter()
-            .filter(|v| v.name.starts_with(name))
-            .collect::<Vec<_>>();
+        let mut v = search(name, &lock.0, &lock.1);
         v.sort_by(|a, b| b.order.cmp(&a.order));
         v.into_iter()
             .map(|v| Crate {
@@ -32,13 +29,23 @@ impl InfoProvider {
             .collect()
     }
 
-    pub async fn get_local(&self, name: &str) -> Option<OfflineCrate> {
+    pub async fn get_local(&self, name: &str) -> Option<Arc<OfflineCrate>> {
         let lock = self.data.read().await;
-        lock.iter().find(|v| v.name == name).cloned()
+        lock.2.iter().find(|v| v.name == name).cloned()
     }
 }
 
-pub async fn init(offline: Arc<RwLock<bool>>, data: Arc<RwLock<Vec<OfflineCrate>>>, root: PathBuf) {
+pub async fn init(
+    offline: Arc<RwLock<bool>>,
+    data: Arc<
+        RwLock<(
+            Set<Vec<u8>>,
+            HashMap<String, Vec<Arc<OfflineCrate>>>,
+            Vec<Arc<OfflineCrate>>,
+        )>,
+    >,
+    root: PathBuf,
+) {
     {
         if let Some(v) = read_data(&root.join("offline")) {
             *data.write().await = v;
@@ -47,7 +54,104 @@ pub async fn init(offline: Arc<RwLock<bool>>, data: Arc<RwLock<Vec<OfflineCrate>
     updater(offline, root.join("offline"), data);
 }
 
-fn read_data(root: &Path) -> Option<Vec<OfflineCrate>> {
+use fst::{IntoStreamer, Set, SetBuilder, Streamer as _};
+use std::collections::HashSet;
+
+fn tokenize(name: &str) -> Vec<String> {
+    name.split(|c| c == '-' || c == '_')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_lowercase())
+        .collect()
+}
+
+fn build_index(
+    crate_list: Vec<Arc<OfflineCrate>>,
+) -> (Set<Vec<u8>>, HashMap<String, Vec<Arc<OfflineCrate>>>) {
+    let mut token_to_crates: HashMap<String, Vec<Arc<OfflineCrate>>> = HashMap::new();
+    let mut unique_tokens = HashSet::new();
+
+    for krate_arc in crate_list {
+        let tokens = tokenize(&krate_arc.name);
+        for token in tokens {
+            let token = token.to_lowercase();
+            for i in 1..=token.len() {
+                let prefix = &token[..i];
+                token_to_crates
+                    .entry(prefix.to_string())
+                    .or_default()
+                    .push(Arc::clone(&krate_arc));
+                unique_tokens.insert(prefix.to_string());
+            }
+        }
+    }
+
+    let mut token_list: Vec<String> = unique_tokens.into_iter().collect();
+    token_list.sort();
+
+    let buffer = {
+        let mut builder = SetBuilder::memory();
+        for token in &token_list {
+            builder.insert(token).unwrap();
+        }
+        builder.into_inner().unwrap()
+    };
+
+    let set = Set::new(buffer).unwrap();
+    (set, token_to_crates)
+}
+
+fn search(
+    query: &str,
+    fst_set: &Set<Vec<u8>>,
+    token_map: &HashMap<String, Vec<Arc<OfflineCrate>>>,
+) -> Vec<Arc<OfflineCrate>> {
+    let query_tokens = tokenize(query);
+    if query_tokens.is_empty() {
+        return vec![];
+    }
+
+    let mut matching_sets: Vec<HashSet<Arc<OfflineCrate>>> = Vec::new();
+
+    for token in query_tokens {
+        let mut current_set = HashSet::new();
+        let mut stream = fst_set.range().ge(&token).into_stream();
+
+        while let Some(token_bytes) = stream.next() {
+            let prefix = String::from_utf8_lossy(&token_bytes);
+            if !prefix.starts_with(&token) {
+                break;
+            }
+
+            if let Some(crates) = token_map.get(prefix.as_ref()) {
+                for krate in crates {
+                    current_set.insert(Arc::clone(krate));
+                }
+            }
+        }
+
+        if current_set.is_empty() {
+            return vec![]; // Early exit: no matches for one of the tokens
+        }
+
+        matching_sets.push(current_set);
+    }
+
+    let mut iter = matching_sets.into_iter();
+    let first = iter.next().unwrap();
+    let intersection = iter.fold(first, |acc, set| acc.intersection(&set).cloned().collect());
+
+    let mut results: Vec<_> = intersection.into_iter().collect();
+    results.sort_by_key(|krate| krate.name.clone());
+    results
+}
+
+fn read_data(
+    root: &Path,
+) -> Option<(
+    Set<Vec<u8>>,
+    HashMap<String, Vec<Arc<OfflineCrate>>>,
+    Vec<Arc<OfflineCrate>>,
+)> {
     let current = read_to_string(root.join("current")).ok()?;
     let path = root.join(current);
     if path.is_dir() {
@@ -92,12 +196,24 @@ fn read_data(root: &Path) -> Option<Vec<OfflineCrate>> {
             reader.read_exact(&mut buffer).ok()?;
             res.push(OfflineCrate::from_vec(buffer, &keywords, &categories))
         }
-        return Some(res);
+        let items = res.into_iter().map(Arc::new).collect::<Vec<_>>();
+        let indexed = build_index(items.clone());
+        return Some((indexed.0, indexed.1, items));
     }
     None
 }
 
-pub fn updater(offline: Arc<RwLock<bool>>, root: PathBuf, data: Arc<RwLock<Vec<OfflineCrate>>>) {
+pub fn updater(
+    offline: Arc<RwLock<bool>>,
+    root: PathBuf,
+    data: Arc<
+        RwLock<(
+            Set<Vec<u8>>,
+            HashMap<String, Vec<Arc<OfflineCrate>>>,
+            Vec<Arc<OfflineCrate>>,
+        )>,
+    >,
+) {
     tokio::spawn(async move {
         loop {
             if !*offline.read().await {
@@ -113,7 +229,7 @@ pub fn updater(offline: Arc<RwLock<bool>>, root: PathBuf, data: Arc<RwLock<Vec<O
     });
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OfflineCrate {
     pub name: String,
     pub repository: Option<String>,

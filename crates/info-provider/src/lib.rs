@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use api::{CacheItem, CacheItemOut, Crate, Root1};
+use fst::{Set, SetBuilder};
 use local::OfflineCrate;
 use tokio::sync::RwLock;
 
@@ -15,14 +16,26 @@ pub struct InfoProvider {
     search_cache: Arc<RwLock<HashMap<String, CacheItem<Crate>>>>,
     per_page: RwLock<usize>,
     offline: Arc<RwLock<bool>>,
-    data: Arc<RwLock<Vec<OfflineCrate>>>,
+    data: Arc<
+        RwLock<(
+            Set<Vec<u8>>,
+            HashMap<String, Vec<Arc<OfflineCrate>>>,
+            Vec<Arc<OfflineCrate>>,
+        )>,
+    >,
     root: PathBuf,
 }
 
 impl InfoProvider {
     pub async fn new(per_page: usize, offline: bool, data_path: PathBuf) -> Self {
         let off = Arc::new(RwLock::new(offline));
-        let off_data = Arc::new(RwLock::new(Vec::new()));
+        let mut builder = SetBuilder::memory();
+        builder.insert("placeholder").unwrap();
+        let off_data = Arc::new(RwLock::new((
+            Set::new(builder.into_inner().unwrap()).unwrap(),
+            HashMap::new(),
+            Vec::new(),
+        )));
         if offline {
             local::init(off.clone(), off_data.clone(), data_path.clone()).await;
         }
@@ -49,7 +62,12 @@ impl InfoProvider {
         match (old_offline, offline) {
             (true, false) => {
                 *self.offline.write().await = false;
-                self.data.write().await.clear();
+                let mut builder = SetBuilder::memory();
+                builder.insert("placeholder").unwrap();
+                let mut lock = self.data.write().await;
+                lock.1 = HashMap::new();
+                lock.2 = Vec::new();
+                lock.0 = Set::new(builder.into_inner().unwrap()).unwrap()
             }
             (false, true) => {
                 *self.offline.write().await = true;
@@ -70,7 +88,7 @@ impl InfoProvider {
     pub async fn search(&self, name: &str) -> Result<Vec<Crate>, anyhow::Error> {
         let offline = *self.offline.read().await;
         if offline {
-            let len = self.data.read().await.len();
+            let len = self.data.read().await.1.len();
             if len != 0 {
                 return Ok(self.search_local(name).await);
             }
@@ -100,10 +118,12 @@ mod tests {
                 .data
                 .read()
                 .await
-                .iter()
+                .1
+                .values()
+                .flatten()
                 .max_by(|a, b| a.order.cmp(&b.order))
         );
         time::sleep(Duration::from_secs(20)).await;
-        println!("{}", provider.data.read().await.len());
+        println!("{}", provider.data.read().await.1.len());
     }
 }

@@ -165,7 +165,7 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cargotom"
-version = "2.3.6"
+version = "2.3.7"
 dependencies = [
  "lsp",
  "tokio",
@@ -353,6 +353,12 @@ checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
 dependencies = [
  "percent-encoding",
 ]
+
+[[package]]
+name = "fst"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ab85b9b05e3978cc9a9cf8fea7f01b494e1a09ed3037e16ba39edc7a29eb61a"
 
 [[package]]
 name = "futf"
@@ -815,10 +821,11 @@ dependencies = [
 
 [[package]]
 name = "info-provider"
-version = "2.3.6"
+version = "2.3.7"
 dependencies = [
  "anyhow",
  "byteorder",
+ "fst",
  "html2md",
  "reqwest",
  "rust-version",
@@ -969,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "lsp"
-version = "2.3.6"
+version = "2.3.7"
 dependencies = [
  "info-provider",
  "parser",
@@ -1202,7 +1209,7 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "2.3.6"
+version = "2.3.7"
 dependencies = [
  "async-recursion",
  "difference",
@@ -1479,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "rust-version"
-version = "2.3.6"
+version = "2.3.7"
 dependencies = [
  "serde",
 ]

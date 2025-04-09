@@ -15,7 +15,7 @@
       /// Use stable versions in completions
       "stable_version": true,
       /// Offline mode uses https://github.com/frederik-uni/crates.io-dump-minfied for search
-      /// The search/order is non existent(name.starts_with) feel free to contribute
+      /// The order is non existent feel free to contribute
       "offline": false,
     }
   },
@@ -56,12 +56,12 @@
 - [x] static manifest suggestions
   - [ ] fix path detection
   - [ ] default value
-- [ ] dependency
+- [x] dependency
   - [x] name
-    - [ ] filter existing
+    - [x] filter existing
     - [ ] add workspace crates
     - [ ] sort
-    - [ ] starts with, contains, starts_with_segment, treat - and _ the same
+    - [x] starts_with_segment, treat - and _ the same
   - [x] dependency version
   - [x] dependency features
   - [x] dependency workspace
