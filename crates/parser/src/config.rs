@@ -16,7 +16,7 @@ pub struct Config {
     #[serde(default)]
     pub sort_format: bool,
 
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub offline: bool,
 
     #[serde(default = "default_true")]
@@ -31,7 +31,7 @@ impl Default for Config {
             hide_docs_info_message: false,
             sort_format: false,
             stable_version: true,
-            offline: false,
+            offline: true,
         }
     }
 }
