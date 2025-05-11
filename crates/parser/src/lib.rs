@@ -14,6 +14,7 @@ use std::{
 
 use async_recursion::async_recursion;
 use config::Config;
+use glob::Pattern;
 use info_provider::InfoProvider;
 use lock::LoggedRwLock;
 use ropey::Rope;
@@ -35,10 +36,27 @@ pub struct Db {
     trees: HashMap<Uri, Tree>,
     tomls: HashMap<Uri, Toml>,
     info: Arc<InfoProvider>,
-    workspaces: HashMap<Uri, Uri>,
+    workspaces: Workspaces,
     locks: HashMap<Uri, CargoLockRaw>,
     pub warnings: Arc<RwLock<HashMap<Uri, Vec<Warning>>>>,
     pub config: Config,
+}
+
+#[derive(Default)]
+pub struct Workspaces(HashMap<Pattern, Uri>);
+
+impl Workspaces {
+    pub fn get(&self, uri: &Uri) -> Option<&Uri> {
+        self.0
+            .iter()
+            .find(|(p, _)| p.matches(&uri.to_string()))
+            .map(|v| v.1)
+    }
+
+    pub fn insert(&mut self, key: &Uri, value: Uri) -> Option<Url> {
+        let pattern = Pattern::new(&key.to_string()).ok()?;
+        self.0.insert(pattern, value)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -68,7 +86,7 @@ impl Db {
                 files: HashMap::new(),
                 trees: HashMap::new(),
                 tomls: HashMap::new(),
-                workspaces: HashMap::new(),
+                workspaces: Default::default(),
                 locks: HashMap::new(),
                 warnings: Default::default(),
             },
@@ -102,8 +120,6 @@ impl Db {
         self.trees
             .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
         self.tomls
-            .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
-        self.workspaces
             .retain(|uri, _| !Self::is_within_workspace(uri, workspace_uri));
     }
 
@@ -253,7 +269,7 @@ impl Db {
                         )
                         .ok()?;
                         self.try_init(&ur).await;
-                        let v = self.workspaces.insert(ur, uri.clone());
+                        let v = self.workspaces.insert(&ur, uri.clone());
                         if v.is_some() {
                             uri_ = None
                         }

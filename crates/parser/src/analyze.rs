@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_recursion::async_recursion;
 use info_provider::api::CacheItemOut;
 use rust_version::RustVersion;
-use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
 use crate::{toml::DepSource, tree::RangeExclusive, Db, Level, Uri, Warning};
 

@@ -18,6 +18,7 @@ tokio = { workspace = true, features = ["sync"] }
 async-recursion.workspace = true
 indexmap = { workspace = true, features = ["serde"] }
 regex.workspace = true
+glob.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
