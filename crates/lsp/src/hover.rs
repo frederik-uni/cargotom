@@ -30,7 +30,7 @@ impl Context {
                 .await
             {
                 Ok(v) => format!(
-                    "List of all availanle versions: \n{}",
+                    "List of all available versions: \n{}",
                     v.into_iter()
                         .map(|v| format!("- {}", v.vers))
                         .rev()
