@@ -70,6 +70,7 @@ pub struct Dependency {
     pub kind: DependencyKind,
     /// Source of the dependency
     pub source: DepSource,
+    pub package: Option<Positioned<String>>,
     /// Enable features for this dependency
     pub features: Positioned<Vec<Positioned<String>>>,
     pub features_key_range: Option<RangeExclusive>,
@@ -82,6 +83,28 @@ pub struct Dependency {
     /// Target platforms for this dependency
     /// if empty = all platforms
     pub target: Arc<Vec<Positioned<Target>>>,
+}
+
+impl Dependency {
+    pub fn crate_name(&self) -> String {
+        self.package
+            .as_ref()
+            .map(|v| &v.data)
+            .unwrap_or(&self.name.data)
+            .to_owned()
+    }
+
+    pub fn set_name(&mut self, name: String) {
+        self.name.data = name;
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name.data
+    }
+
+    pub fn crate_name_range(&self) -> RangeExclusive {
+        RangeExclusive::from(&self.name)
+    }
 }
 
 impl Display for DepSource {

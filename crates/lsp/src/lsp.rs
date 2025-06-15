@@ -256,7 +256,7 @@ impl LanguageServer for Context {
                     .info
                     .get_info(
                         registry.as_ref().map(|v| v.value.data.as_str()),
-                        &dep.data.name.data,
+                        &dep.data.crate_name(),
                     )
                     .await;
                 match version_info {
@@ -273,7 +273,7 @@ impl LanguageServer for Context {
                 }
                 let version = &value.value.data;
 
-                let name = &dep.data.name.data;
+                let crate_name = &dep.data.crate_name();
 
                 let open_page =
                     |actions_last: &mut Vec<CodeActionOrCommand>, name, url: &String| {
@@ -291,7 +291,7 @@ impl LanguageServer for Context {
                     };
 
                 if lock.config.offline {
-                    let info = self.info.get_local(name).await;
+                    let info = self.info.get_local(crate_name).await;
                     if let Some(info) = info {
                         if let Some(repo) = &info.repository {
                             open_page(&mut actions_last, "Repository", repo);
@@ -307,7 +307,7 @@ impl LanguageServer for Context {
                     open_page(
                         &mut actions_last,
                         "Documentation",
-                        &format!("https://docs.rs/{name}/{version}/"),
+                        &format!("https://docs.rs/{crate_name}/{version}/"),
                     );
                     let action = CodeAction {
                         title: "Open Source".to_string(),
@@ -316,7 +316,7 @@ impl LanguageServer for Context {
                             title: "Open Source".to_string(),
                             command: "open-src".to_string(),
                             arguments: Some(vec![
-                                serde_json::Value::String(name.clone()),
+                                serde_json::Value::String(crate_name.clone()),
                                 serde_json::Value::String(version.clone()),
                             ]),
                         }),
@@ -327,7 +327,7 @@ impl LanguageServer for Context {
                 open_page(
                     &mut actions_last,
                     "crates.io",
-                    &format!("https://crates.io/crates/{name}"),
+                    &format!("https://crates.io/crates/{crate_name}"),
                 );
             } else if let DepSource::Workspace(range) = &dep.data.source {
                 let workspace_uri = lock.get_workspace(&uri);
@@ -336,12 +336,12 @@ impl LanguageServer for Context {
                     if workspace
                         .dependencies
                         .iter()
-                        .find(|v| v.data.name.data == dep.data.name.data)
+                        .find(|v| v.data.name() == dep.data.crate_name())
                         .is_none()
                     {
                         if let Ok(Some(info)) = self
                             .info
-                            .get_info(None, &dep.data.name.data)
+                            .get_info(None, &dep.data.crate_name())
                             .await
                             .map(|v| {
                                 v.into_iter().rfind(|v| match lock.config.stable_version {
@@ -374,7 +374,8 @@ impl LanguageServer for Context {
                                                             ),
                                                             new_text: format!(
                                                                 "{} = \"{}\"",
-                                                                dep.data.name.data, info.vers
+                                                                dep.data.crate_name(),
+                                                                info.vers
                                                             ),
                                                         }],
                                                     )]
@@ -582,30 +583,29 @@ impl LanguageServer for Context {
         let mut deps = toml
             .dependencies
             .iter()
-            .map(|v| &v.data.name.data)
+            .map(|v| v.data.name())
             .collect::<HashSet<_>>();
         if let Some(dep) = toml.dependencies.iter().find(|v| v.contains(pos)) {
-            if dep.data.name.contains(pos) {
-                let end = pos.saturating_sub(dep.data.name.start as usize);
+            if dep.data.crate_name_range().contains(pos) {
+                let end = pos.saturating_sub(dep.data.crate_name_range().start as usize);
                 let remove = toml
                     .dependencies
                     .iter()
                     .find(|v| {
-                        v.data.name.data == dep.data.name.data
-                            && RangeExclusive::from(&v.data.name)
-                                != RangeExclusive::from(&dep.data.name)
+                        v.data.name() == dep.data.name()
+                            && v.data.crate_name_range() != dep.data.crate_name_range()
                     })
                     .is_none();
                 if remove {
-                    deps.remove(&&dep.data.name.data);
+                    deps.remove(&dep.data.name());
                 }
-                let slice = dep.data.name.data.get(..end).unwrap_or(&dep.data.name.data);
+                let slice = dep.data.name().get(..end).unwrap_or(&dep.data.name());
                 let info = self.info.search(slice).await.unwrap_or_default();
                 let start = try_option!(lock.get_offset(&uri, dep.start as usize));
                 let end = try_option!(lock.get_offset(&uri, dep.end as usize));
                 let out = Ok(Some(CompletionResponse::Array(
                     info.into_iter()
-                        .filter(|v| !deps.contains(&v.name))
+                        .filter(|v| !deps.contains(&v.name.as_str()))
                         .enumerate()
                         .map(|(i, v)| CompletionItem {
                             label: format!("{i}. {}", v.name.clone()),
@@ -626,7 +626,7 @@ impl LanguageServer for Context {
                                 },
                                 new_text: {
                                     let mut dep = dep.data.clone();
-                                    dep.name.data = v.name;
+                                    dep.set_name(v.name);
                                     if let DepSource::None = dep.source {
                                         match workspace.is_some() {
                                             true => {
@@ -667,7 +667,7 @@ impl LanguageServer for Context {
                         .info
                         .get_info(
                             registry.as_ref().map(|v| v.value.data.as_str()),
-                            &dep.data.name.data,
+                            &dep.data.crate_name(),
                         )
                         .await
                         .unwrap_or_default();
@@ -714,7 +714,7 @@ impl LanguageServer for Context {
                     workspace.and_then(|v| {
                         v.dependencies
                             .iter()
-                            .find(|v| v.data.name.data == dep.data.name.data)
+                            .find(|v| v.data.name() == dep.data.crate_name())
                             .map(|v| &v.data.source)
                     })
                 } else {
@@ -726,7 +726,7 @@ impl LanguageServer for Context {
                         .info
                         .get_info(
                             registry.as_ref().map(|v| v.value.data.as_str()),
-                            &dep.data.name.data,
+                            &dep.data.crate_name(),
                         )
                         .await
                         .unwrap_or_default()

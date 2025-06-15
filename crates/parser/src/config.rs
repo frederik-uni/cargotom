@@ -23,6 +23,43 @@ pub struct Config {
     pub stable_version: bool,
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct ConfigV2 {
+    pub online: OnlineConfig,
+    pub offline: OfflineConfig,
+    pub display: DisplayConfig,
+    pub general: GeneralConfig,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct GeneralConfig {
+    #[serde(default = "default_true")]
+    pub stable_version: bool,
+    #[serde(default)]
+    pub sort_format: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct OnlineConfig {
+    #[serde(default = "default_per_page")]
+    pub per_page: usize,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct OfflineConfig {
+    #[serde(default = "default_true")]
+    pub offline: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct DisplayConfig {
+    /// All, UnusedOpt, Features,
+    #[serde(default = "default_feature_display_mode")]
+    pub feature_display_mode: ViewMode,
+    #[serde(default)]
+    pub hide_docs_info_message: bool,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {

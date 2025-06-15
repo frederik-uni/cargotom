@@ -71,17 +71,17 @@ impl Context {
         let workspace_uri = lock.get_workspace(uri)?;
         let workspace = lock.get_toml(workspace_uri)?;
         let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
-        let dep_name = &dep.data.name.data;
         if workspace
             .dependencies
             .iter()
-            .find(|v| &v.data.name.data == dep_name)
+            .find(|v| v.data.name() == dep.data.crate_name())
             .is_none()
         {
             let last = workspace.dependencies.last()?;
             let line = lock.get_line(workspace_uri, last.end as usize)? as u32 + 1;
             let dep = Dependency {
                 name: dep.data.name.clone(),
+                package: dep.data.package.clone(),
                 kind: DependencyKind::Normal,
                 source: dep.data.source.clone(),
                 features: Positioned::new(0, 0, Vec::new()),

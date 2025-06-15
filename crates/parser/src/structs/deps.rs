@@ -19,6 +19,7 @@ pub fn get_dependencies(
         let name = dep_tree.key.to_positioned(dep_tree.pos.end);
         let mut dep = Dependency {
             name,
+            package: None,
             kind,
             expanded: true,
             source: DepSource::None,
@@ -139,6 +140,10 @@ fn dependency_tree_format_parser(value: &Tree, dep: &mut Dependency) {
             },
             "default-features" | "default_features" => match tree_value.value.as_bool() {
                 Some(value) => dep.default_features = Some(value),
+                None => continue,
+            },
+            "package" => match tree_value.value.as_str() {
+                Some(value) => dep.package = Some(value),
                 None => continue,
             },
             "optional" => match tree_value.value.as_bool() {

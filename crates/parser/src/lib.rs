@@ -149,13 +149,13 @@ impl Db {
         }
         let lock = self.locks.get(&root_file)?;
         let packges = lock.packages();
-        let extract = |id| packges.get(id)?.first();
+        let extract = |id: String| packges.get(&id)?.first();
         let data = toml
             .dependencies
             .iter()
             .filter_map(|v| {
                 self.get_offset(uri, v.end as usize)
-                    .map(|pos| (pos, extract(&v.data.name.data)))
+                    .map(|pos| (pos, extract(v.data.crate_name())))
             })
             .filter_map(|(pos, p)| p.map(|p| (pos, p.clone())))
             .collect::<Vec<_>>();

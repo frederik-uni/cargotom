@@ -26,7 +26,7 @@ impl Context {
             let end = lock.get_offset(&uri, range.end as usize)?;
             let info = match self
                 .info
-                .get_info(dep.data.source.registry(), &dep.data.name.data)
+                .get_info(dep.data.source.registry(), &dep.data.crate_name())
                 .await
             {
                 Ok(v) => format!(
@@ -66,13 +66,12 @@ impl Context {
         uri: &Url,
         lock: &LoggedReadGuard<'_, Db>,
     ) -> Option<Hover> {
-        let range = RangeExclusive::from(&dep.data.name);
+        let range = dep.data.crate_name_range();
         if range.contains(offset) {
             let start = lock.get_offset(&uri, range.start as usize)?;
             let end = lock.get_offset(&uri, range.end as usize)?;
-            let name = &dep.data.name.data;
             let lock = lock.get_lock(uri)?.packages();
-            let lock = lock.get(name)?.first()?;
+            let lock = lock.get(dep.data.name())?.first()?;
             let mut use_ = false;
             if let Some(Source::Registry(s)) = &lock.source {
                 use_ = s == "https://github.com/rust-lang/crates.io-index";
@@ -82,7 +81,7 @@ impl Context {
             }
             let content = self
                 .info
-                .get_readme_api(&dep.data.name.data, &lock.version.to_string())
+                .get_readme_api(&dep.data.crate_name(), &lock.version.to_string())
                 .await?;
 
             return Some(Hover {
@@ -125,7 +124,7 @@ impl Context {
                     let w_dep = workspace
                         .dependencies
                         .iter()
-                        .find(|v| v.data.name.data == dep.data.name.data)?;
+                        .find(|v| v.data.name() == dep.data.crate_name())?;
                     Some(&w_dep.data.source.version()?.data)
                 }
                 _ => None,
@@ -138,7 +137,7 @@ impl Context {
             let end = lock.get_offset(&uri, range.end as usize)?;
             let info = match self
                 .info
-                .get_info(dep.data.source.registry(), &dep.data.name.data)
+                .get_info(dep.data.source.registry(), &dep.data.crate_name())
                 .await
             {
                 Ok(v) => format!(

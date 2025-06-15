@@ -54,7 +54,9 @@ impl Db {
             names
                 .entry(format!(
                     "{}{:?}{}",
-                    toml.data.name.data, toml.data.kind, targets
+                    toml.data.name(),
+                    toml.data.kind,
+                    targets
                 ))
                 .or_default()
                 .push(toml)
@@ -63,7 +65,7 @@ impl Db {
             if tomls.len() > 1 {
                 for toml in tomls {
                     errors.push((
-                        RangeExclusive::from(&toml.data.name),
+                        toml.data.crate_name_range(),
                         format!("Duplicate dependency name"),
                     ));
                 }
@@ -75,7 +77,7 @@ impl Db {
                 workspace.as_ref().and_then(|v| {
                     v.dependencies
                         .iter()
-                        .find(|v| v.data.name.data == toml.data.name.data)
+                        .find(|v| v.data.name() == toml.data.crate_name())
                         .map(|v| (&v.data.source, Some(range.clone()), true))
                 })
             } else {
@@ -87,18 +89,16 @@ impl Db {
                     .info
                     .get_info_cache(
                         registry.as_ref().map(|v| v.value.data.as_str()),
-                        &toml.data.name.data,
+                        &toml.data.crate_name(),
                     )
                     .await;
                 match info {
-                    CacheItemOut::Error(e) => {
-                        errors.push((RangeExclusive::from(&toml.data.name), e))
-                    }
+                    CacheItemOut::Error(e) => errors.push((toml.data.crate_name_range(), e)),
                     CacheItemOut::Pending => {}
                     CacheItemOut::NotStarted => {
                         let info = self.info.clone();
                         let reg = registry.as_ref().map(|v| v.value.data.to_string());
-                        let name = toml.data.name.data.to_owned();
+                        let name = toml.data.crate_name();
                         let uri = uri.clone();
                         let sel = self.sel.clone().unwrap();
                         if !workspace {
@@ -157,7 +157,7 @@ impl Db {
                     Some(w) => {
                         if w.dependencies
                             .iter()
-                            .find(|v| v.data.name.data == toml.data.name.data)
+                            .find(|v| v.data.name() == toml.data.crate_name())
                             .is_none()
                         {
                             errors.push((range.clone(), format!("coundt find crate in workspace")));
