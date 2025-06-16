@@ -44,4 +44,4 @@ regex = "1.11.1"
 fst = "0.4.7"
 
 [patch.crates-io]
-html2md = { git = "https://gitlab.com/o0Frederik0o/html2md" }
+html2md = { git = "https://gitlab.com/o0Frederik0o/html2md.git" }
