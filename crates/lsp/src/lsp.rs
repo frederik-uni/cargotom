@@ -273,7 +273,7 @@ impl LanguageServer for Context {
                 }
                 let version = &value.value.data;
 
-                let crate_name = &dep.data.crate_name();
+                let crate_name = dep.data.crate_name();
 
                 let open_page =
                     |actions_last: &mut Vec<CodeActionOrCommand>, name, url: &String| {
@@ -316,7 +316,7 @@ impl LanguageServer for Context {
                             title: "Open Source".to_string(),
                             command: "open-src".to_string(),
                             arguments: Some(vec![
-                                serde_json::Value::String(crate_name.clone()),
+                                serde_json::Value::String(crate_name.to_owned()),
                                 serde_json::Value::String(version.clone()),
                             ]),
                         }),

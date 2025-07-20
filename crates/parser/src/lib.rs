@@ -149,7 +149,7 @@ impl Db {
         }
         let lock = self.locks.get(&root_file)?;
         let packges = lock.packages();
-        let extract = |id: String| packges.get(&id)?.first();
+        let extract = |id: &str| packges.get(id)?.first();
         let data = toml
             .dependencies
             .iter()
