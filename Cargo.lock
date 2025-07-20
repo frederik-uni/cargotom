@@ -538,7 +538,7 @@ dependencies = [
 [[package]]
 name = "html2md"
 version = "0.2.15"
-source = "git+https://gitlab.com/o0Frederik0o/html2md#a50c50b5b98d4360257002b23d967471001ef0df"
+source = "git+https://gitlab.com/o0Frederik0o/html2md.git#a50c50b5b98d4360257002b23d967471001ef0df"
 dependencies = [
  "html5ever",
  "jni",
