@@ -414,7 +414,11 @@ impl LanguageServer for Context {
             let name = params.arguments.get(0).and_then(|arg| arg.as_str());
             let version = params.arguments.get(1).and_then(|arg| arg.as_str());
             let mut src = if let Some(name) = name {
-                self.info.get_crate_repository(name).await
+                self.info
+                    .get_crate_metadata(name)
+                    .await
+                    .ok()
+                    .and_then(|metadata| metadata.repository)
             } else {
                 None
             };
