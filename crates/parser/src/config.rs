@@ -21,6 +21,9 @@ pub struct Config {
 
     #[serde(default = "default_true")]
     pub stable_version: bool,
+
+    #[serde(default = "default_true")]
+    pub outdated_crate_warnings: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -69,6 +72,7 @@ impl Default for Config {
             sort_format: false,
             stable_version: true,
             offline: true,
+            outdated_crate_warnings: true,
         }
     }
 }
