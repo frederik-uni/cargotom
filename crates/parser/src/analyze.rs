@@ -141,10 +141,12 @@ impl Db {
                                     })
                                     .rfind(|(_, v)| v > &ver)
                                 {
-                                    warnings.push((
-                                        range,
-                                        format!("Newer version available: {}", info.vers),
-                                    ))
+                                    if self.config.outdated_crate_warnings {
+                                        warnings.push((
+                                            range,
+                                            format!("Newer version available: {}", info.vers),
+                                        ))
+                                    }
                                 }
                             } else {
                                 errors.push((range, "Invalid version".to_string()))
