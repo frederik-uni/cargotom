@@ -97,7 +97,9 @@ impl InfoProvider {
         registry: Option<&str>,
         name: &str,
     ) -> CacheItemOut<Root1> {
-        let reg = registry.unwrap_or(self.registry);
+        let reg = registry
+            .and_then(|name| self.registries.get(name).map(|index| index.as_str()))
+            .unwrap_or(self.registry);
         let lock = self.info_cache.read().await;
         let cache = match lock.get(reg) {
             Some(v) => v,
@@ -170,7 +172,9 @@ impl InfoProvider {
         registry: Option<&str>,
         name: &str,
     ) -> Result<Vec<Root1>, String> {
-        let reg = registry.unwrap_or(self.registry);
+        let reg = registry
+            .and_then(|name| self.registries.get(name).map(|index| index.as_str()))
+            .unwrap_or(self.registry);
         let fetch = {
             let lock = self.info_cache.read().await;
             match lock.get(reg) {

@@ -11,6 +11,7 @@ mod local;
 pub struct InfoProvider {
     client: Arc<reqwest::Client>,
     registry: &'static str,
+    registries: HashMap<String, String>,
     readme_cache: Arc<RwLock<HashMap<(String, String), CacheItem<String>>>>,
     info_cache: Arc<RwLock<HashMap<String, HashMap<String, CacheItem<Root1>>>>>,
     search_cache: Arc<RwLock<HashMap<String, CacheItem<Crate>>>>,
@@ -39,12 +40,21 @@ impl InfoProvider {
         if offline {
             local::init(off.clone(), off_data.clone(), data_path.clone()).await;
         }
+
+        let registries = cargo_config2::Config::load()
+            .expect("missing cargo config")
+            .registries
+            .into_iter()
+            .flat_map(|(name, registry)| registry.index.map(|index| (name, index)))
+            .collect();
+
         Self {
             root: data_path,
             data: off_data,
             offline: off,
             client: Arc::new(reqwest::Client::new()),
             registry: "https://index.crates.io/",
+            registries,
             info_cache: Default::default(),
             search_cache: Default::default(),
             readme_cache: Default::default(),
