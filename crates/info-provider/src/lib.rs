@@ -45,7 +45,17 @@ impl InfoProvider {
             .expect("missing cargo config")
             .registries
             .into_iter()
-            .flat_map(|(name, registry)| registry.index.map(|index| (name, index)))
+            .flat_map(|(name, registry)| {
+                registry.index.map(|index| {
+                    (
+                        name,
+                        index
+                            .strip_prefix("sparse+")
+                            .map(ToOwned::to_owned)
+                            .unwrap_or(index),
+                    )
+                })
+            })
             .collect();
 
         Self {
