@@ -16,6 +16,7 @@ tar = "0.4"
 byteorder.workspace = true
 html2md.workspace = true
 fst.workspace = true
+openssl = {workspace = true, features = ["vendored"]}
 cargo-config2 = "0.1.39"
 
 [dev-dependencies]
