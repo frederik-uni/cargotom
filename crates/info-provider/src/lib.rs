@@ -116,8 +116,19 @@ impl InfoProvider {
         self.search_api(name).await
     }
 
-    pub async fn get_crate_repository(&self, crate_name: &str) -> Option<String> {
-        self.get_crate_repository_api(crate_name).await
+    pub async fn get_crate_metadata(&self, crate_name: &str) -> Result<Crate, anyhow::Error> {
+        let offline = *self.offline.read().await;
+        if offline {
+            let len = self.data.read().await.1.len();
+            if len != 0 {
+                let offline_crate = self
+                    .get_local(crate_name)
+                    .await
+                    .ok_or(anyhow::anyhow!("Crate is not found: {}", crate_name))?;
+                return Ok(offline_crate.as_crate(true));
+            }
+        }
+        self.get_crate_metadata_api(crate_name).await
     }
 }
 

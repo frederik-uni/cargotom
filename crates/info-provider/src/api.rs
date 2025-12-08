@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeSet, HashMap, HashSet},
     sync::Arc,
 };
@@ -78,18 +79,18 @@ impl InfoProvider {
         }
     }
 
-    pub async fn get_crate_repository_api(&self, crate_name: &str) -> Option<String> {
+    pub async fn get_crate_metadata_api(&self, crate_name: &str) -> Result<Crate, anyhow::Error> {
         let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
 
-        let response = self
+        Ok(self
             .client
             .get(&url)
             .header(USER_AGENT, "zed")
             .send()
-            .await
-            .ok()?;
-        let json: serde_json::Value = response.json().await.ok()?;
-        json["crate"]["repository"].as_str().map(|s| s.to_string())
+            .await?
+            .json::<SingleCrateResponse>()
+            .await?
+            .crate_metadata)
     }
 
     pub async fn get_info_cache_api(
@@ -271,13 +272,32 @@ pub struct Crate {
     pub exact_match: bool,
     pub name: String,
     pub description: Option<String>,
+    pub homepage: Option<String>,
+    pub documentation: Option<String>,
+    pub repository: Option<String>,
     pub max_stable_version: Option<String>,
     pub max_version: Option<String>,
+}
+
+impl Crate {
+    /// Returns documentation URL when set, otherwise falls back to docs.rs
+    pub fn documentation_url(&self) -> Cow<'_, str> {
+        self.documentation
+            .as_deref()
+            .map(Cow::Borrowed)
+            .unwrap_or_else(|| Cow::Owned(format!("https://docs.rs/{}", self.name)))
+    }
 }
 
 #[derive(Serialize, Deserialize)]
 struct SearchResponse {
     crates: Vec<Crate>,
+}
+
+#[derive(Deserialize)]
+struct SingleCrateResponse {
+    #[serde(rename = "crate")]
+    crate_metadata: Crate,
 }
 
 async fn info(
