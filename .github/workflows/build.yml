@@ -50,6 +50,9 @@ jobs:
       - name: Install libssl-dev on Linux
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libssl-dev
+      - name: musl
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get install -y musl-tools
 
       - name: Install openssl on macOS
         if: runner.os == 'macOS'
