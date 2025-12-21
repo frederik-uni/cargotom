@@ -98,7 +98,7 @@ impl Db {
                     CacheItemOut::NotStarted => {
                         let info = self.info.clone();
                         let reg = registry.as_ref().map(|v| v.value.data.to_string());
-                        let name = toml.data.crate_name();
+                        let name = toml.data.crate_name().to_owned();
                         let uri = uri.clone();
                         let sel = self.sel.clone().unwrap();
                         if !workspace {

@@ -273,33 +273,32 @@ impl LanguageServer for Context {
                 }
                 let version = &value.value.data;
 
-                let crate_name = &dep.data.crate_name();
+                let crate_name = dep.data.crate_name();
 
-                let open_page =
-                    |actions_last: &mut Vec<CodeActionOrCommand>, name, url: &String| {
-                        let action = CodeAction {
+                let open_page = |actions_last: &mut Vec<CodeActionOrCommand>, name, url: String| {
+                    let action = CodeAction {
+                        title: format!("Open {name}"),
+                        kind: Some(CodeActionKind::EMPTY),
+                        command: Some(Command {
                             title: format!("Open {name}"),
-                            kind: Some(CodeActionKind::EMPTY),
-                            command: Some(Command {
-                                title: format!("Open {name}"),
-                                command: "open_url".to_string(),
-                                arguments: Some(vec![serde_json::Value::String(url.clone())]),
-                            }),
-                            ..CodeAction::default()
-                        };
-                        actions_last.push(CodeActionOrCommand::CodeAction(action));
+                            command: "open_url".to_string(),
+                            arguments: Some(vec![serde_json::Value::String(url)]),
+                        }),
+                        ..CodeAction::default()
                     };
+                    actions_last.push(CodeActionOrCommand::CodeAction(action));
+                };
 
                 if lock.config.offline {
                     let info = self.info.get_local(crate_name).await;
                     if let Some(info) = info {
-                        if let Some(repo) = &info.repository {
+                        if let Some(repo) = info.repository.clone() {
                             open_page(&mut actions_last, "Repository", repo);
                         }
-                        if let Some(documentation) = &info.documentation {
+                        if let Some(documentation) = info.documentation.clone() {
                             open_page(&mut actions_last, "Documentation", documentation);
                         }
-                        if let Some(homepage) = &info.homepage {
+                        if let Some(homepage) = info.homepage.clone() {
                             open_page(&mut actions_last, "Homepage", homepage);
                         }
                     }
@@ -307,7 +306,7 @@ impl LanguageServer for Context {
                     open_page(
                         &mut actions_last,
                         "Documentation",
-                        &format!("https://docs.rs/{crate_name}/{version}/"),
+                        format!("https://docs.rs/{crate_name}/{version}/"),
                     );
                     let action = CodeAction {
                         title: "Open Source".to_string(),
@@ -316,7 +315,7 @@ impl LanguageServer for Context {
                             title: "Open Source".to_string(),
                             command: "open-src".to_string(),
                             arguments: Some(vec![
-                                serde_json::Value::String(crate_name.clone()),
+                                serde_json::Value::String(crate_name.to_owned()),
                                 serde_json::Value::String(version.clone()),
                             ]),
                         }),
@@ -327,7 +326,7 @@ impl LanguageServer for Context {
                 open_page(
                     &mut actions_last,
                     "crates.io",
-                    &format!("https://crates.io/crates/{crate_name}"),
+                    format!("https://crates.io/crates/{crate_name}"),
                 );
             } else if let DepSource::Workspace(range) = &dep.data.source {
                 let workspace_uri = lock.get_workspace(&uri);
@@ -415,7 +414,11 @@ impl LanguageServer for Context {
             let name = params.arguments.get(0).and_then(|arg| arg.as_str());
             let version = params.arguments.get(1).and_then(|arg| arg.as_str());
             let mut src = if let Some(name) = name {
-                self.info.get_crate_repository(name).await
+                self.info
+                    .get_crate_metadata(name)
+                    .await
+                    .ok()
+                    .and_then(|metadata| metadata.repository)
             } else {
                 None
             };
