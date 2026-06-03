@@ -259,23 +259,25 @@ impl Db {
             if let Some(tree) = self.trees.get(&uri) {
                 let empty = Arc::new(Vec::new());
                 let str = to_struct(tree, empty);
-                if str.workspace {
-                    for ur in &str.children {
-                        let file_path = uri.to_file_path().ok()?;
-                        let folder_path = file_path.parent();
-                        let new_path = folder_path.map(|v| v.join(format!("{}/Cargo.toml", ur)));
-                        let ur = Url::from_file_path(
-                            &new_path.unwrap_or(PathBuf::from(format!("{}/Cargo.toml", ur))),
-                        )
-                        .ok()?;
-                        self.try_init(&ur).await;
-                        let v = self.workspaces.insert(&ur, uri.clone());
-                        if v.is_some() {
-                            uri_ = None
-                        }
+                let children = match str.workspace {
+                    true => str.children.clone(),
+                    false => Vec::new(),
+                };
+                self.tomls.insert(uri.clone(), str);
+                for ur in &children {
+                    let file_path = uri.to_file_path().ok()?;
+                    let folder_path = file_path.parent();
+                    let new_path = folder_path.map(|v| v.join(format!("{}/Cargo.toml", ur)));
+                    let ur = Url::from_file_path(
+                        new_path.unwrap_or(PathBuf::from(format!("{ur}/Cargo.toml"))),
+                    )
+                    .ok()?;
+                    let v = self.workspaces.insert(&ur, uri.clone());
+                    self.try_init(&ur).await;
+                    if v.is_some() {
+                        uri_ = None
                     }
                 }
-                self.tomls.insert(uri.clone(), str);
             }
         }
         self.analyze(uri_).await;
