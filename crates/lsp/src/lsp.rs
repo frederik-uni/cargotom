@@ -47,6 +47,13 @@ macro_rules! crate_version {
         env!("CARGO_PKG_VERSION")
     };
 }
+
+fn dependency_requirement(version: &str) -> &str {
+    version
+        .split_once('+')
+        .map_or(version, |(version, _)| version)
+}
+
 fn load_config(params: &InitializeParams) -> Config {
     params
         .initialization_options
@@ -639,6 +646,7 @@ impl LanguageServer for Context {
                                                     false => v.max_version.or(v.max_stable_version),
                                                 }
                                                 .unwrap_or_default();
+                                                let ver = dependency_requirement(&ver).to_owned();
                                                 dep.source = DepSource::Version {
                                                     value: OptionalKey::no_key(Positioned::new(
                                                         0, 0, ver,

@@ -54,12 +54,6 @@ impl Ord for RustVersion {
             (None, Some(_)) => Ordering::Greater, // no pre-release > pre-release
             (None, None) => Ordering::Equal,
         })
-        .then_with(|| match (&self.build, &other.build) {
-            (Some(self_build), Some(other_build)) => self_build.cmp(other_build),
-            (Some(_), None) => Ordering::Less, // Arbitrary decision; could also be Equal
-            (None, Some(_)) => Ordering::Greater,
-            (None, None) => Ordering::Equal,
-        })
     }
 }
 

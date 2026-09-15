@@ -7,6 +7,13 @@ use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
 use crate::{toml::DepSource, tree::RangeExclusive, Db, Level, Uri, Warning};
 
+fn crate_not_found_message(registry: Option<&str>, name: &str) -> String {
+    match registry {
+        Some(registry) => format!("crate {name} not found in registry {registry}"),
+        None => format!("crate {name} not found on crates.io"),
+    }
+}
+
 impl Db {
     pub async fn analyze(&self, uri: Option<Uri>) {
         let _ = self.client.inlay_hint_refresh().await;
@@ -117,6 +124,16 @@ impl Db {
                         }
                     }
                     CacheItemOut::Ready(items) => {
+                        if items.is_empty() {
+                            warnings.push((
+                                toml.data.crate_name_range(),
+                                crate_not_found_message(
+                                    registry.as_ref().map(|v| v.value.data.as_str()),
+                                    &toml.data.crate_name(),
+                                ),
+                            ));
+                            continue;
+                        }
                         let ver = RustVersion::try_from(value.value.data.as_str());
                         if let Ok(ver) = ver {
                             let versions = items

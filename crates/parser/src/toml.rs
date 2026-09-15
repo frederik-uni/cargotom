@@ -367,6 +367,7 @@ impl DepSource {
             DepSource::Version { value, .. } => {
                 *value = key;
             }
+            DepSource::Git { .. } | DepSource::Path(_) => {}
             _ => {
                 *self = DepSource::Version {
                     value: key,

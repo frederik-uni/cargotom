@@ -300,13 +300,23 @@ async fn info(
             _ => format!("{}/{}/{}", &name[0..2], &name[2..4], name),
         }
     );
-    let data = client
-        .get(url)
-        .header(USER_AGENT, "zed")
-        .send()
-        .await?
-        .text()
-        .await?
+    let response = client.get(url).header(USER_AGENT, "zed").send().await?;
+    let status = response.status();
+    let body = response.text().await?;
+    parse_registry_response(status, &body)
+}
+
+fn parse_registry_response(
+    status: reqwest::StatusCode,
+    body: &str,
+) -> Result<Vec<Root1>, anyhow::Error> {
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    if !status.is_success() {
+        anyhow::bail!("registry request failed with status {status}");
+    }
+    let data = body
         .lines()
         .map(serde_json::from_str)
         .collect::<Result<Vec<Root1>, _>>()?;
