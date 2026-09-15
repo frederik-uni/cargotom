@@ -29,14 +29,38 @@ impl Context {
                 .get_info(dep.data.source.registry(), &dep.data.crate_name())
                 .await
             {
-                Ok(v) => format!(
-                    "List of all available versions: \n{}",
-                    v.into_iter()
-                        .map(|v| format!("- {}", v.vers))
-                        .rev()
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ),
+                Ok(v) => {
+                    let crate_metadata = self
+                        .info
+                        .get_crate_metadata(&dep.data.crate_name())
+                        .await
+                        .ok();
+
+                    let metadata = crate_metadata.map(|metadata| {
+                        let mut meta_items = vec![];
+                        if let Some(home_url) = metadata.homepage.as_deref() {
+                            meta_items.push(format!("[website]({})", home_url));
+                        }
+                        if let Some(repo_url) = metadata.repository.as_deref() {
+                            meta_items.push(format!("[repo]({})", repo_url));
+                        }
+                        meta_items.push(format!("[docs]({})", metadata.documentation_url()));
+                        meta_items.join(" | ")
+                    });
+
+                    let versions = format!(
+                        "List of all available versions: \n{}",
+                        v.into_iter()
+                            .map(|v| format!("- {}", v.vers))
+                            .rev()
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    );
+
+                    metadata
+                        .map(|metadata| format!("{}\n\n{}", metadata, versions))
+                        .unwrap_or(versions)
+                }
                 Err(_) => "Couldnt find version info".to_owned(),
             };
             return Some(Hover {

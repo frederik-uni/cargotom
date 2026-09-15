@@ -86,12 +86,11 @@ pub struct Dependency {
 }
 
 impl Dependency {
-    pub fn crate_name(&self) -> String {
+    pub fn crate_name(&self) -> &str {
         self.package
             .as_ref()
             .map(|v| &v.data)
             .unwrap_or(&self.name.data)
-            .to_owned()
     }
 
     pub fn set_name(&mut self, name: String) {

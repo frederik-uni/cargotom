@@ -18,15 +18,7 @@ impl InfoProvider {
         let lock = self.data.read().await;
         let mut v = search(name, &lock.0, &lock.1);
         v.sort_by(|a, b| b.order.cmp(&a.order));
-        v.into_iter()
-            .map(|v| Crate {
-                exact_match: v.name == name,
-                name: v.name.clone(),
-                description: v.description.clone(),
-                max_stable_version: v.latest_stable_version.clone(),
-                max_version: v.latest_version.clone().or(v.latest_stable_version.clone()),
-            })
-            .collect()
+        v.into_iter().map(|v| v.as_crate(v.name == name)).collect()
     }
 
     pub async fn get_local(&self, name: &str) -> Option<Arc<OfflineCrate>> {
@@ -354,6 +346,23 @@ impl OfflineCrate {
             documentation,
             latest_stable_version,
             latest_version,
+        }
+    }
+
+    pub fn as_crate(&self, exact_match: bool) -> Crate {
+        Crate {
+            exact_match,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            homepage: self.homepage.clone(),
+            documentation: self.documentation.clone(),
+            repository: self.repository.clone(),
+            max_stable_version: self.latest_stable_version.clone(),
+            max_version: self
+                .latest_version
+                .as_ref()
+                .or(self.latest_stable_version.as_ref())
+                .cloned(),
         }
     }
 }
