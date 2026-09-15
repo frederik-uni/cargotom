@@ -9,7 +9,11 @@ pub mod tree;
 mod tree_to_struct;
 
 use std::{
-    collections::HashMap, fs::read_to_string, panic::catch_unwind, path::PathBuf, sync::Arc,
+    collections::{HashMap, HashSet},
+    fs::read_to_string,
+    panic::catch_unwind,
+    path::PathBuf,
+    sync::Arc,
 };
 
 use async_recursion::async_recursion;
@@ -250,8 +254,22 @@ impl Db {
         Some(found)
     }
 
-    #[async_recursion]
+    fn cycle_key(uri: &Uri) -> String {
+        uri.to_file_path()
+            .ok()
+            .and_then(|p| std::fs::canonicalize(p).ok())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|| uri.to_string())
+    }
+
     pub async fn reload(&mut self, uri: Uri) -> Option<()> {
+        let mut seen = HashSet::new();
+        seen.insert(Self::cycle_key(&uri));
+        self.reload_seen(uri, &mut seen).await
+    }
+
+    #[async_recursion]
+    async fn reload_seen(&mut self, uri: Uri, seen: &mut HashSet<String>) -> Option<()> {
         let content = self.files.get(&uri);
         let mut uri_ = Some(uri.clone());
         if let Some(content) = content {
@@ -272,8 +290,12 @@ impl Db {
                         new_path.unwrap_or(PathBuf::from(format!("{ur}/Cargo.toml"))),
                     )
                     .ok()?;
+                    // Prevents infinite recursion form alias, symlink, or "."
+                    if !seen.insert(Self::cycle_key(&ur)) {
+                        continue;
+                    }
                     let v = self.workspaces.insert(&ur, uri.clone());
-                    self.try_init(&ur).await;
+                    self.try_init_seen(&ur, seen).await;
                     if v.is_some() {
                         uri_ = None
                     }
@@ -303,6 +325,12 @@ impl Db {
     }
 
     pub async fn try_init(&mut self, uri: &Uri) -> Option<()> {
+        let mut seen = HashSet::new();
+        seen.insert(Self::cycle_key(uri));
+        self.try_init_seen(uri, &mut seen).await
+    }
+
+    async fn try_init_seen(&mut self, uri: &Uri, seen: &mut HashSet<String>) -> Option<()> {
         if !self.files.contains_key(uri) {
             self.add_file(uri);
         }
@@ -319,7 +347,7 @@ impl Db {
             self.update_lock(file).await;
         }
 
-        self.reload(uri.clone()).await;
+        self.reload_seen(uri.clone(), seen).await;
 
         Some(())
     }
