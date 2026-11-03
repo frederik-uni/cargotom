@@ -179,10 +179,10 @@ impl Db {
                             .find(|v| v.data.name() == toml.data.crate_name())
                             .is_none()
                         {
-                            errors.push((range.clone(), format!("coundt find crate in workspace")));
+                            errors.push((range.clone(), format!("couldn't find crate in workspace")));
                         }
                     }
-                    None => errors.push((range.clone(), format!("isnt part of a workspace"))),
+                    None => errors.push((range.clone(), format!("isn't part of a workspace"))),
                 }
             }
         }
